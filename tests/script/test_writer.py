@@ -37,3 +37,18 @@ def test_llm_fact_check_rejection_counts():
     with pytest.raises(ScriptRejected, match="not in source"):
         write_checked_script(article(), VideoFormat.NEWS_FLASH, llm, SMALL)
     assert llm.calls == 4
+
+
+def test_empty_fact_check_is_not_a_pass():
+    empty = FactCheckResult(verdicts=[])
+    llm = ScriptedLLM([GOOD, empty, GOOD, empty])
+    with pytest.raises(ScriptRejected, match="did not judge every claim"):
+        write_checked_script(article(), VideoFormat.NEWS_FLASH, llm, SMALL)
+
+
+def test_partial_fact_check_is_not_a_pass():
+    two_claims = GOOD.model_copy(update={"claims": [*GOOD.claims, Claim(text="32GB", source_quote="32GB of GDDR7")]})
+    one_ok = FactCheckResult(verdicts=[ClaimVerdict(claim="c", supported=True, reason="ok")])
+    llm = ScriptedLLM([two_claims, one_ok, two_claims, one_ok])
+    with pytest.raises(ScriptRejected):
+        write_checked_script(article(), VideoFormat.NEWS_FLASH, llm, SMALL)

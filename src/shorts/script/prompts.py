@@ -27,6 +27,7 @@ Rules:
 - The hook is at most 12 words and makes people want to keep watching without exaggerating.
 - Every number you say must appear in the SOURCE.
 - For every factual claim, add an entry to "claims" whose source_quote is copied verbatim from the SOURCE.
+- Plain text only: no emoji, no hashtags inside the narration.
 - Do not call anything "viral", promise results, or use clickbait that distorts the facts.
 - Titles: 3 honest options under 100 characters. Hashtags: 3 to 5, relevant only.
 - card_facts: up to 6 short label/value pairs (specs, prices, dates) taken from the SOURCE.

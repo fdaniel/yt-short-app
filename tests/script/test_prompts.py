@@ -29,3 +29,7 @@ def test_feedback_included_when_present():
 def test_factcheck_prompt_lists_claims_and_source():
     p = build_factcheck_prompt(draft(), article())
     assert "launches January 30, 2025 at $1,999" in p and SOURCE in p
+
+
+def test_prompt_forbids_emoji():
+    assert "emoji" in build_script_prompt(article(), VideoFormat.NEWS_FLASH, [], VideoSettings())

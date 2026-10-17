@@ -66,6 +66,8 @@ def test_e2e_no_trailers(settings, conn):
     kinds = {a.kind for a in AssetRepository(conn).list_for_video(r.video_id)}
     assert AssetKind.TRAILER not in kinds and {AssetKind.CARD, AssetKind.SCREENSHOT} <= kinds
     assert not (settings.data_dir / "work" / str(r.video_id)).exists()
+    cards = [a for a in AssetRepository(conn).list_for_video(r.video_id) if a.kind == AssetKind.CARD]
+    assert len(cards) == 2 + len(GOOD.card_facts)  # hook, fact table, one card per fact
 
 
 @respx.mock

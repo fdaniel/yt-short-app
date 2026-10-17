@@ -53,3 +53,14 @@ def test_length_in_range_ok():
     line = " ".join(["word"] * 25)
     d = draft(hook="a b", body=[line, line, line], closing="c")
     assert length_problems(d, VideoSettings()) == []
+
+
+def test_typographic_quotes_and_dashes_match_ascii():
+    source = "NVIDIA’s new card – the “RTX 5090” is here."
+    d = draft(claims=[Claim(text="x", source_quote='NVIDIA\'s new card - the "RTX 5090" is here')])
+    assert quotes_missing(d, source) == []
+
+
+def test_narration_lines_strip_emoji_and_markup():
+    d = draft(hook="DLSS 5 \U0001F680 {is} here\\")
+    assert narration_lines(d)[0] == "DLSS 5 is here"

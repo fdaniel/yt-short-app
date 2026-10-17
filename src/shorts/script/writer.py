@@ -23,6 +23,15 @@ def _cheap_problems(draft: ScriptDraft, article: Article, video: VideoSettings) 
     return length_problems(draft, video) + missing + numbers
 
 
+def _verdict_problems(draft: ScriptDraft, result: FactCheckResult) -> list[str]:
+    problems = [f"unsupported claim: {v.claim} ({v.reason})" for v in result.verdicts if not v.supported]
+    if len(result.verdicts) < len(draft.claims):
+        problems.append(
+            f"fact check did not judge every claim ({len(result.verdicts)} of {len(draft.claims)})"
+        )
+    return problems
+
+
 def write_checked_script(
     article: Article, fmt: VideoFormat, llm: LLMProvider, video: VideoSettings
 ) -> ScriptDraft:
@@ -32,9 +41,7 @@ def write_checked_script(
         problems = _cheap_problems(draft, article, video)
         if not problems:  # only spend an LLM call on the fact check when cheap checks pass
             result = llm.generate_json(build_factcheck_prompt(draft, article), FactCheckResult)
-            problems = [
-                f"unsupported claim: {v.claim} ({v.reason})" for v in result.verdicts if not v.supported
-            ]
+            problems = _verdict_problems(draft, result)
         if not problems:
             return draft
         feedback = problems

@@ -1,9 +1,9 @@
 """Short, timed caption chunks rendered as an ASS subtitle file."""
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from shorts.text import clean_text
 from shorts.voice.narration import Narration
 
 _HEADER = """[Script Info]
@@ -32,8 +32,7 @@ class CaptionChunk:
 
 def sanitize_caption_text(text: str) -> str:
     """Drop characters that ASS treats as markup, and emoji the font cannot draw."""
-    cleaned = "".join(ch for ch in text if ch not in "{}\\" and ord(ch) <= 0xFFFF)
-    return re.sub(r"\s+", " ", cleaned).strip()
+    return clean_text(text)
 
 
 def _group_words(text: str, max_chars: int, max_words: int) -> list[str]:

@@ -59,3 +59,26 @@ def test_region_error_is_unavailable():
 def test_bad_output_is_invalid(text):
     with pytest.raises(InvalidOutput):
         GeminiProvider("k", "m", client=FakeGenaiClient(result=_Resp(text))).generate_json("p", Out)
+
+
+def test_network_error_is_unavailable():
+    import httpx
+
+    p = GeminiProvider("k", "m", client=FakeGenaiClient(raises=httpx.ConnectError("refused")))
+    with pytest.raises(ProviderUnavailable, match="network"):
+        p.generate_json("p", Out)
+
+
+def test_client_built_with_timeout(monkeypatch):
+    from shorts.llm import gemini
+
+    captured = {}
+
+    class Spy:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(gemini.genai, "Client", Spy)
+    GeminiProvider("k", "m")
+    assert captured["api_key"] == "k"
+    assert captured["http_options"].timeout == gemini.TIMEOUT_MS

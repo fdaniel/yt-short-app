@@ -36,6 +36,9 @@ cp config.example.yaml config.yaml
 
 ### Free AI keys (put them in `.env`, never anywhere else)
 
+> **Stay at €0:** create each key in a project **without billing enabled** (no card attached).
+> A key from a project with billing turned on can be charged once the free quota runs out, and this app cannot tell the difference.
+
 - `GEMINI_API_KEY`: https://aistudio.google.com → **Get API key**.
 - `FALLBACK_LLM_API_KEY` (optional, used when Gemini's free quota runs out): a free key from https://console.groq.com.
 

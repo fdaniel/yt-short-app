@@ -4,12 +4,15 @@ import re
 
 from shorts.config import VideoSettings
 from shorts.script.schema import ScriptDraft
+from shorts.text import clean_text
 
 _NUMBER = re.compile(r"\d[\d,.]*\d|\d")
+_TYPOGRAPHY = str.maketrans({"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"',
+                             "\u2013": "-", "\u2014": "-", "\u00a0": " "})
 
 
 def narration_lines(draft: ScriptDraft) -> list[str]:
-    return [draft.hook, *draft.body, draft.closing]
+    return [clean_text(line) for line in (draft.hook, *draft.body, draft.closing)]
 
 
 def word_count(draft: ScriptDraft) -> int:
@@ -26,7 +29,7 @@ def length_problems(draft: ScriptDraft, video: VideoSettings) -> list[str]:
 
 
 def _normalise(text: str) -> str:
-    return " ".join(text.lower().split())
+    return " ".join(text.translate(_TYPOGRAPHY).lower().split())
 
 
 def quotes_missing(draft: ScriptDraft, source_text: str) -> list[str]:

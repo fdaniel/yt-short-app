@@ -26,6 +26,7 @@ from shorts.script.schema import ScriptDraft
 from shorts.script.writer import write_checked_script
 from shorts.sources.article import Article, fetch_article
 from shorts.sources.steam import SteamError, collect_steam_assets, fetch_steam_app
+from shorts.text import clean_text
 from shorts.storage.repositories import AssetRepository, BlocklistRepository, VideoRepository
 from shorts.voice.narration import Narration, build_narration
 from shorts.voice.tts import TTSEngine
@@ -145,10 +146,13 @@ def _card(path: Path) -> Asset:
 def _cards(draft: ScriptDraft, article: Article, job: _Job) -> list[Asset]:
     font = job.settings.font_file
     job.work.mkdir(parents=True, exist_ok=True)
-    cards = [_card(render_hook_card(draft.hook, job.work / "card_hook.png", font))]
-    if draft.card_facts:
-        title = article.title or draft.title_options[0]
-        cards.append(_card(render_fact_card(title, draft.card_facts, job.work / "card_facts.png", font)))
+    cards = [_card(render_hook_card(narration_lines(draft)[0], job.work / "card_hook.png", font))]
+    if not draft.card_facts:
+        return cards
+    title = clean_text(article.title or draft.title_options[0])
+    cards.append(_card(render_fact_card(title, draft.card_facts, job.work / "card_facts.png", font)))
+    for i, fact in enumerate(draft.card_facts):
+        cards.append(_card(render_fact_card(title, [fact], job.work / f"card_fact_{i}.png", font)))
     return cards
 
 
