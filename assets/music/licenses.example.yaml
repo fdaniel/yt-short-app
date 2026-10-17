@@ -1,0 +1,5 @@
+# Copy to licenses.yaml. One entry per audio file in this folder.
+# Files without an entry are never used.
+# example_track.mp3:
+#   source: YouTube Audio Library
+#   licence: "Free to use in YouTube videos, no attribution required"
