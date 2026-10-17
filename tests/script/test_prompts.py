@@ -8,7 +8,7 @@ def test_script_prompt_rules():
     p = build_script_prompt(article(), VideoFormat.SPEC_BREAKDOWN, [], VideoSettings())
     assert "English" in p
     assert "only facts from the SOURCE" in p
-    assert "75" in p and "140" in p
+    assert "65" in p and "100" in p
     assert "12 words" in p
     assert "verbatim" in p
     assert "viral" in p and "clickbait" in p

@@ -44,12 +44,12 @@ def test_too_short_flagged():
 
 
 def test_too_long_flagged():
-    long_line = " ".join(["word"] * 150)
+    long_line = " ".join(["word"] * 110)
     d = draft(body=[long_line, "x", "y"])
     assert any("too long" in p for p in length_problems(d, VideoSettings()))
 
 
 def test_length_in_range_ok():
-    line = " ".join(["word"] * 30)
+    line = " ".join(["word"] * 25)
     d = draft(hook="a b", body=[line, line, line], closing="c")
     assert length_problems(d, VideoSettings()) == []

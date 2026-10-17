@@ -24,7 +24,7 @@ class KokoroTTS:
         if self._pipeline is None:
             from kokoro import KPipeline  # heavy import, only when actually speaking
 
-            self._pipeline = KPipeline(lang_code=self._lang_code)
+            self._pipeline = KPipeline(lang_code=self._lang_code, repo_id="hexgrad/Kokoro-82M")
         parts = [
             np.asarray(result.audio, dtype=np.float32)
             for result in self._pipeline(text, voice=self._voice, speed=self._speed)

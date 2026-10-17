@@ -30,8 +30,8 @@ class VoiceSettings(_Frozen):
 class VideoSettings(_Frozen):
     min_narration_s: float = 30
     max_narration_s: float = 55
-    min_words: int = 75
-    max_words: int = 140
+    min_words: int = 65
+    max_words: int = 100
     max_shot_s: float = 4.0
     max_trailer_share: float = 0.49
     slot_s: float = 3.5
