@@ -50,3 +50,8 @@ def settings(tmp_path):
     cfg = tmp_path / "config.yaml"
     cfg.write_text(f"data_dir: {tmp_path / 'data'}\nmusic_dir: {tmp_path / 'music'}\n")
     return load_settings(cfg, {"GEMINI_API_KEY": "test-key"})
+
+
+@pytest.fixture
+def font_file() -> Path:
+    return Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
