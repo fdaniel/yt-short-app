@@ -34,3 +34,19 @@ def make_asset():
         return replace(base, **overrides)
 
     return _make
+
+
+@pytest.fixture
+def synthetic_video(tmp_path) -> Path:
+    from tests.helpers import lavfi_video
+
+    return lavfi_video(tmp_path, "testsrc2=size=1920x1080:rate=30:duration=6", audio=True)
+
+
+@pytest.fixture
+def settings(tmp_path):
+    from shorts.config import load_settings
+
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text(f"data_dir: {tmp_path / 'data'}\nmusic_dir: {tmp_path / 'music'}\n")
+    return load_settings(cfg, {"GEMINI_API_KEY": "test-key"})

@@ -1,0 +1,10 @@
+{"1": {"success": true, "data": {
+  "name": "Some Game", "publishers": ["Some Publisher"],
+  "movies": [
+    {"id": 257082775, "name": "City of Dreams", "highlight": true,
+     "thumbnail": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/257082775/movie_600x337.jpg?t=1",
+     "dash_av1": "https://video.akamai.steamstatic.com/store_trailers/1/801198/abc/1750617889/dash_av1.mpd?t=1734434767",
+     "dash_h264": "https://video.akamai.steamstatic.com/store_trailers/1/801198/abc/1750617889/dash_h264.mpd?t=1734434767",
+     "hls_h264": "https://video.akamai.steamstatic.com/store_trailers/1/801198/abc/1750617889/hls_264_master.m3u8?t=1734434767"}
+  ],
+  "screenshots": []}}}
