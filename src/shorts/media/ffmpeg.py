@@ -5,6 +5,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from shorts.net import validate_public_url
+
 _BASE = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"]
 _STDERR_LINES = 20
 
@@ -65,6 +67,7 @@ def strip_audio(src: Path, dest: Path, *, timeout_s: int) -> Path:
 
 
 def download_hls(url: str, dest: Path, *, max_seconds: int, timeout_s: int) -> Path:
+    validate_public_url(url)
     run_ffmpeg(
         ["-i", url, "-t", str(max_seconds), "-an", "-c:v", "copy", str(dest)], timeout_s=timeout_s
     )
