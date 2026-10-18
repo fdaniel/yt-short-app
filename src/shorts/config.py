@@ -16,7 +16,7 @@ class _Frozen(BaseModel):
 
 
 class LLMSettings(_Frozen):
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-flash-latest"
     fallback_base_url: str = "https://api.groq.com/openai/v1"
     fallback_model: str = "llama-3.3-70b-versatile"
 

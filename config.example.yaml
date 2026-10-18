@@ -4,7 +4,7 @@ music_dir: assets/music
 font_file: /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf
 
 llm:
-  gemini_model: gemini-2.5-flash
+  gemini_model: gemini-flash-latest
   fallback_base_url: https://api.groq.com/openai/v1
   fallback_model: llama-3.3-70b-versatile
 

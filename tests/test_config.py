@@ -52,3 +52,10 @@ def test_nested_override_and_home_expansion(tmp_path):
 def test_missing_config_file_fails_clearly(tmp_path):
     with pytest.raises(ConfigError, match="not found"):
         load_settings(tmp_path / "nope.yaml", {"GEMINI_API_KEY": "k"})
+
+
+def test_default_gemini_model_follows_current_flash(tmp_path):
+    # pinned versions get retired for new keys (2.5-flash returned 404 on 2026-10-18)
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text("")
+    assert load_settings(cfg, {"GEMINI_API_KEY": "k"}).llm.gemini_model == "gemini-flash-latest"
