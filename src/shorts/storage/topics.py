@@ -38,6 +38,11 @@ class TopicRepository:
         with self._conn:
             self._conn.execute("UPDATE topics SET video_id = ?, status = ? WHERE id = ?", (video_id, status.value, topic_id))
 
+    def forget(self, url: str) -> None:
+        """Drop a topic so a later run can consider it again (e.g. the AI quota ran out mid-video)."""
+        with self._conn:
+            self._conn.execute("DELETE FROM topics WHERE url = ?", (url,))
+
     def recent_titles(self, days: int, now: datetime) -> list[str]:
         """Titles of stories picked or made, and of videos made, in the last `days` days."""
         since = (now - timedelta(days=days)).isoformat()

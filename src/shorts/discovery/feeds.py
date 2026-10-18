@@ -64,7 +64,8 @@ def article_from_item(item: FeedItem) -> Article | None:
     if not item.content_html:
         return None
     try:
-        article = extract_article(item.url, item.content_html)
+        # trafilatura may find nothing in a bare fragment, so give it a page around the feed's HTML
+        article = extract_article(item.url, f"<html><body><article>{item.content_html}</article></body></html>")
     except SourceTextError:
         return None
     return replace(article, title=item.title)

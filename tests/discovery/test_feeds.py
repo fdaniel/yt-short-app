@@ -83,3 +83,11 @@ def test_default_feeds_in_settings(tmp_path):
     assert [f.name for f in d.feeds] == ["NVIDIA Newsroom", "NVIDIA Blog", "AMD Press Releases", "Xbox Wire", "PlayStation Blog"]
     assert (d.max_videos_per_day, d.videos_per_run, d.max_age_h, d.min_free_gb) == (3, 1, 48, 10)
     assert d.weights.interest == 0.5 and "board of directors" in d.exclude_keywords
+
+
+def test_article_from_single_paragraph_fragment():
+    # trafilatura returns nothing for a bare one-paragraph fragment unless it is wrapped in a page
+    text = "Official details about the launch date, the price and every platform are listed here today. " * 6
+    it = FeedItem("Xbox Wire", "gaming", "MW4", "https://news.xbox.com/x", datetime.now(UTC), f"<p>{text}</p>")
+    article = article_from_item(it)
+    assert article is not None and "launch date" in article.text
