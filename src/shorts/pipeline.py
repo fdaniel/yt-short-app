@@ -9,17 +9,20 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
+from PIL import UnidentifiedImageError
 
 from shorts.captions import chunk_captions, write_ass
 from shorts.config import Settings
 from shorts.llm.base import LLMProvider
 from shorts.media.cards import render_fact_card, render_hook_card, render_still
+from shorts.media.ffmpeg import FFmpegError
 from shorts.media.render import render_video
 from shorts.media.shots import Shot, detect_shots
 from shorts.media.timeline import plan_timeline
 from shorts.metadata import build_metadata, content_hash, write_metadata
 from shorts.models import Asset, AssetKind, RightsBasis, VideoFormat, VideoStatus
 from shorts.music import pick_music
+from shorts.net import DownloadTooLarge, UnsafeURLError
 from shorts.rights import RightsError, assert_usable
 from shorts.script.checks import narration_lines
 from shorts.script.schema import ScriptDraft
@@ -32,6 +35,9 @@ from shorts.voice.narration import Narration, build_narration
 from shorts.voice.tts import TTSEngine
 
 log = logging.getLogger(__name__)
+
+# anything that goes wrong getting Steam media means "no Steam media", never "no video"
+_STEAM_ERRORS = (SteamError, httpx.HTTPError, ValueError, OSError, FFmpegError, DownloadTooLarge, UnsafeURLError)
 
 
 class PipelineError(Exception):
@@ -62,6 +68,7 @@ class _Job:
     deps: PipelineDeps
     conn: sqlite3.Connection
     work: Path
+    article: Article | None = None
 
 
 def make_video(
@@ -71,25 +78,32 @@ def make_video(
     settings: Settings,
     deps: PipelineDeps,
     conn: sqlite3.Connection,
+    *,
+    article: Article | None = None,
 ) -> VideoResult:
+    """Make one video. `article`, when given (e.g. full text from a feed), is used instead of fetching `news_url`."""
     videos = VideoRepository(conn)
     video_id = videos.create(news_url, steam_app_id, fmt)
-    job = _Job(video_id, news_url, steam_app_id, fmt, settings, deps, conn, settings.data_dir / "work" / str(video_id))
+    work = settings.data_dir / "work" / str(video_id)
+    job = _Job(video_id, news_url, steam_app_id, fmt, settings, deps, conn, work, article)
     try:
-        result = _produce(job)
+        return _produce(job)
+    except KeyboardInterrupt:
+        videos.set_status(video_id, VideoStatus.FAILED, "interrupted")
+        raise
     except Exception as exc:
         reason = str(exc) or type(exc).__name__
         log.exception("Video %s failed", video_id)
         videos.set_status(video_id, VideoStatus.FAILED, reason)
         raise PipelineError(reason) from exc
-    shutil.rmtree(job.work, ignore_errors=True)
-    return result
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
 
 
 def _produce(job: _Job) -> VideoResult:
     videos = VideoRepository(job.conn)
     s = job.settings
-    article = fetch_article(job.deps.http, job.news_url, max_bytes=s.limits.max_html_bytes)
+    article = job.article or fetch_article(job.deps.http, job.news_url, max_bytes=s.limits.max_html_bytes)
     draft = write_checked_script(article, job.fmt, job.deps.llm, s.video)
     videos.save_script(job.video_id, draft.model_dump_json(), draft.title_options[0])
     videos.set_status(job.video_id, VideoStatus.FACT_CHECKED)
@@ -129,10 +143,10 @@ def _steam_assets(job: _Job, blocked: set[str]) -> list[Asset]:
         return []
     try:
         app = fetch_steam_app(job.deps.http, job.steam_app_id, max_bytes=job.settings.limits.max_html_bytes)
-    except (SteamError, httpx.HTTPError) as exc:
-        log.warning("Steam data unavailable for app %s, using generated visuals: %s", job.steam_app_id, exc)
+        return collect_steam_assets(app, job.deps.http, job.work / "steam", job.settings, blocked)
+    except _STEAM_ERRORS as exc:
+        log.warning("Steam media unavailable for app %s, using generated visuals: %s", job.steam_app_id, exc)
         return []
-    return collect_steam_assets(app, job.deps.http, job.work / "steam", job.settings, blocked)
 
 
 def _card(path: Path) -> Asset:
@@ -175,11 +189,14 @@ def _gather_assets(draft: ScriptDraft, article: Article, job: _Job) -> list[Asse
 
 def _images(draft: ScriptDraft, article: Article, assets: list[Asset], job: _Job) -> list[Path]:
     cards = [a.local_path for a in assets if a.kind == AssetKind.CARD]
-    stills = [
-        render_still(a.local_path, job.work / f"still_{a.id}.png")
-        for a in assets
-        if a.kind == AssetKind.SCREENSHOT
-    ]
+    stills = []
+    for a in assets:
+        if a.kind != AssetKind.SCREENSHOT:
+            continue
+        try:
+            stills.append(render_still(a.local_path, job.work / f"still_{a.id}.png"))
+        except (OSError, UnidentifiedImageError) as exc:
+            log.warning("Skipping screenshot %s that could not be read: %s", a.source_url, exc)
     return cards + stills
 
 

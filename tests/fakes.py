@@ -51,3 +51,4 @@ class FakeTTS:
 
     def synthesize(self, text):
         return np.zeros(int(len(text) * self.rate * self.sample_rate), np.float32), self.sample_rate
+

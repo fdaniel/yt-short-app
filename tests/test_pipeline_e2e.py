@@ -12,7 +12,8 @@ from shorts.models import AssetKind, VideoFormat, VideoStatus
 from shorts.pipeline import PipelineDeps, PipelineError, make_video
 from shorts.script.schema import CardFact, Claim, ClaimVerdict, FactCheckResult, ScriptDraft
 from shorts.storage.repositories import AssetRepository, VideoRepository
-from tests.fakes import FakeTTS, ScriptedLLM
+from shorts.sources.article import extract_article
+from tests.fakes import Failing, FakeTTS, ScriptedLLM
 
 FIXTURES = Path(__file__).parent / "fixtures"
 NEWS = "https://nvidianews.nvidia.com/news/x"
@@ -96,5 +97,54 @@ def test_e2e_steam_failure_falls_back_to_cards(settings, conn):
     respx.get(url__startswith="https://store.steampowered.com/api/appdetails").respond(503)
     deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
     r = make_video(NEWS, 999, VideoFormat.NEWS_FLASH, settings, deps, conn)
+    kinds = {a.kind for a in AssetRepository(conn).list_for_video(r.video_id)}
+    assert kinds == {AssetKind.CARD}
+
+
+@respx.mock
+def test_given_article_is_not_fetched(settings, conn):
+    mock_sources()
+    route = respx.get(NEWS)
+    given = extract_article(NEWS, (FIXTURES / "article_nvidia.html").read_text())
+    deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
+    make_video(NEWS, None, VideoFormat.NEWS_FLASH, settings, deps, conn, article=given)
+    assert route.call_count == 0
+
+
+@respx.mock
+def test_failure_removes_work_dir(settings, conn, monkeypatch):
+    mock_sources()
+    monkeypatch.setattr("shorts.pipeline.render_video", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("render crashed")))
+    deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
+    with pytest.raises(PipelineError, match="render crashed"):
+        make_video(NEWS, None, VideoFormat.NEWS_FLASH, settings, deps, conn)
+    assert not any((settings.data_dir / "work").glob("*"))
+
+
+@respx.mock
+def test_interrupt_marks_failed(settings, conn):
+    mock_sources()
+    deps = PipelineDeps(httpx.Client(), Failing(KeyboardInterrupt()), FakeTTS(rate=0.07))
+    with pytest.raises(KeyboardInterrupt):
+        make_video(NEWS, None, VideoFormat.NEWS_FLASH, settings, deps, conn)
+    record = VideoRepository(conn).get(1)
+    assert record.status == VideoStatus.FAILED and record.failure_reason == "interrupted"
+
+
+@respx.mock
+def test_broken_screenshot_is_skipped(settings, conn):
+    mock_sources()
+    respx.get(url__regex=r".*\.jpg.*").respond(200, content=b"not an image")
+    deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
+    r = make_video(NEWS, 2, VideoFormat.NEWS_FLASH, settings, deps, conn)
+    assert r.video_path.exists()
+
+
+@respx.mock
+def test_unexpected_steam_error_falls_back_to_cards(settings, conn, monkeypatch):
+    mock_sources()
+    monkeypatch.setattr("shorts.pipeline.collect_steam_assets", lambda *a, **k: (_ for _ in ()).throw(OSError("disk")))
+    deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
+    r = make_video(NEWS, 2, VideoFormat.NEWS_FLASH, settings, deps, conn)
     kinds = {a.kind for a in AssetRepository(conn).list_for_video(r.video_id)}
     assert kinds == {AssetKind.CARD}
