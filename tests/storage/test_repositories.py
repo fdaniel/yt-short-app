@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from shorts.models import VideoFormat, VideoStatus
-from shorts.storage.db import connect
+from shorts.storage.db import MIGRATIONS, connect
 from shorts.storage.repositories import (
     AssetRepository,
     BlocklistRepository,
@@ -17,7 +17,7 @@ def test_connect_is_idempotent(tmp_path):
     connect(db).close()
     conn = connect(db)
     assert conn.execute("select max(version) from schema_version").fetchone()[0] >= 1
-    assert conn.execute("select count(*) from schema_version").fetchone()[0] == 1
+    assert conn.execute("select count(*) from schema_version").fetchone()[0] == len(MIGRATIONS)  # each applied once
 
 
 def test_video_happy_path_transitions(conn):

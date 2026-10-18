@@ -40,6 +40,13 @@ class VideoStatus(StrEnum):
     FAILED = "failed"
 
 
+class TopicStatus(StrEnum):
+    SKIPPED = "skipped"
+    PICKED = "picked"
+    MADE = "made"
+    FAILED = "failed"
+
+
 @dataclass(frozen=True)
 class Asset:
     """A piece of media plus the rights record that allows (or forbids) its use."""

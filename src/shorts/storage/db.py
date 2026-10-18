@@ -40,6 +40,20 @@ MIGRATIONS: tuple[str, ...] = (
         blocked_at TEXT NOT NULL
     );
     """,
+    """
+    CREATE TABLE topics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        url TEXT NOT NULL UNIQUE,
+        source TEXT NOT NULL,
+        title TEXT NOT NULL,
+        published_at TEXT NOT NULL,
+        score REAL,
+        explanation TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL,
+        video_id INTEGER REFERENCES videos(id),
+        created_at TEXT NOT NULL
+    );
+    """,
 )
 
 
