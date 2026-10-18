@@ -1,6 +1,7 @@
 """Official RSS/Atom feeds: the only place automatic mode looks for news."""
 
 import calendar
+import io
 import logging
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -9,7 +10,7 @@ import feedparser
 import httpx
 
 from shorts.config import FeedSource
-from shorts.net import DownloadTooLarge, UnsafeURLError, fetch_text
+from shorts.net import DownloadTooLarge, UnsafeURLError, fetch_bytes
 from shorts.sources.article import Article, SourceTextError, extract_article
 
 log = logging.getLogger(__name__)
@@ -41,7 +42,8 @@ def _item(entry, source: FeedSource) -> FeedItem | None:
 
 
 def fetch_feed(client: httpx.Client, source: FeedSource, *, max_bytes: int) -> list[FeedItem]:
-    parsed = feedparser.parse(fetch_text(client, source.url, max_bytes=max_bytes))
+    # a stream, never a str: feedparser would open a str that looks like a path or URL itself
+    parsed = feedparser.parse(io.BytesIO(fetch_bytes(client, source.url, max_bytes=max_bytes)))
     if parsed.bozo and not parsed.entries:
         raise ValueError(f"{source.name} did not return a readable feed: {parsed.get('bozo_exception')}")
     items = [_item(entry, source) for entry in parsed.entries]

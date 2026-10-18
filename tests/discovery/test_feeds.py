@@ -91,3 +91,12 @@ def test_article_from_single_paragraph_fragment():
     it = FeedItem("Xbox Wire", "gaming", "MW4", "https://news.xbox.com/x", datetime.now(UTC), f"<p>{text}</p>")
     article = article_from_item(it)
     assert article is not None and "launch date" in article.text
+
+
+@respx.mock
+def test_feed_body_is_never_opened_as_a_path_or_url(tmp_path):
+    local = tmp_path / "secret.xml"
+    local.write_text((FIXTURES / "feed_amd_ir.xml").read_text())
+    for body in (str(local), f"file://{local}"):
+        respx.get(BLOG.url).respond(200, text=body)
+        assert fetch_all(httpx.Client(), [BLOG], max_bytes=1_000_000) == []

@@ -166,3 +166,15 @@ def test_search_garbage_returns_none():
 
 def test_blank_title_does_not_search():
     assert steam.find_steam_app_id(httpx.Client(), "  ") is None
+
+
+@respx.mock
+def test_series_match_only_for_top_result():
+    # real ordering for "Black Ops" (2026-10-18): the 2010 game is 3rd; a Black Ops 7 story must not get it
+    respx.get(url__startswith=SEARCH).respond(200, json={"items": [
+        {"type": "app", "name": "Call of Duty\u00ae: Black Ops III", "id": 311210},
+        {"type": "app", "name": "Call of Duty\u00ae: Black Ops II", "id": 202970},
+        {"type": "app", "name": "Call of Duty\u00ae: Black Ops", "id": 42700},
+        {"type": "app", "name": "Call of Duty\u00ae: Black Ops 7", "id": 3606480},
+    ]})
+    assert steam.find_steam_app_id(httpx.Client(), "Black Ops") is None

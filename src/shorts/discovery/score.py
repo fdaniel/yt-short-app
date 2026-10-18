@@ -74,8 +74,9 @@ def coverage(it: FeedItem, all_items: list[FeedItem], settings: DiscoverySetting
 def score_topic(
     it: FeedItem, verdict: Triage, *, footage: bool, coverage: float, settings: DiscoverySettings, now: datetime
 ) -> ScoredTopic:
-    if verdict.rumour_or_leak or not verdict.on_topic:
-        why = "rumour or leak" if verdict.rumour_or_leak else "off topic"
+    if verdict.rumour_or_leak or not verdict.on_topic or verdict.same_story_as_recent:
+        why = ("rumour or leak" if verdict.rumour_or_leak
+               else "off topic" if not verdict.on_topic else "already covered (same story)")
         return ScoredTopic(it, 0.0, f"{why} ({verdict.reason}) = 0", verdict, footage)
     w = settings.weights
     age_h = max(0.0, (now - it.published).total_seconds() / 3600)

@@ -50,7 +50,7 @@ def build_http_client(settings: Settings) -> httpx.Client:
     )
 
 
-def fetch_text(client: httpx.Client, url: str, *, max_bytes: int) -> str:
+def _fetch(client: httpx.Client, url: str, max_bytes: int) -> tuple[bytes, str | None]:
     validate_public_url(url)
     with client.stream("GET", url) as response:
         response.raise_for_status()
@@ -59,7 +59,16 @@ def fetch_text(client: httpx.Client, url: str, *, max_bytes: int) -> str:
             body.extend(chunk)
             if len(body) > max_bytes:
                 raise DownloadTooLarge(f"{url} is larger than {max_bytes} bytes")
-        return body.decode(response.encoding or "utf-8", errors="replace")
+        return bytes(body), response.encoding
+
+
+def fetch_bytes(client: httpx.Client, url: str, *, max_bytes: int) -> bytes:
+    return _fetch(client, url, max_bytes)[0]
+
+
+def fetch_text(client: httpx.Client, url: str, *, max_bytes: int) -> str:
+    body, encoding = _fetch(client, url, max_bytes)
+    return body.decode(encoding or "utf-8", errors="replace")
 
 
 def download_file(client: httpx.Client, url: str, dest: Path, *, max_bytes: int) -> Path:

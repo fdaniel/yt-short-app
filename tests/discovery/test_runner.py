@@ -41,8 +41,8 @@ GAME_ITEMS = [
 ]
 
 
-def verdict(index, interest, game=None):
-    return Triage(index=index, interest=interest, rumour_or_leak=False, on_topic=True, game_title=game,
+def verdict(index, interest, game=None, same=False):
+    return Triage(index=index, interest=interest, rumour_or_leak=False, on_topic=True, same_story_as_recent=same, game_title=game,
                   format=VideoFormat.NEWS_FLASH, reason=f"interest {interest}")
 
 
@@ -193,4 +193,40 @@ def test_game_story_gets_steam_id(cfg, conn):
     mock_feeds(hw=[], games=GAME_ITEMS)
     make = FakeMake(conn)
     run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game="Modern Warfare 4")])]), make)
+    assert make.calls[0][1] == 4435490
+
+
+@respx.mock
+def test_same_launch_worded_differently_is_not_made_twice(cfg, conn):
+    # real titles from 2026-10-16/17: word overlap 0.31, below the cheap duplicate filter
+    first = ("NVIDIA RTX Spark PCs Available Today \u2014 A New Beginning for Windows PCs",
+             "https://blogs.nvidia.com/blog/rtx-spark-today/", "Sun, 18 Oct 2026 06:00:00 +0000")
+    second = ("RTX Spark Ignites Global Celebration as New Windows PCs Arrive",
+              "https://blogs.nvidia.com/blog/rtx-spark-celebration/", "Sun, 18 Oct 2026 10:00:00 +0000")
+    make = FakeMake(conn)
+    mock_feeds(hw=[first], games=[])
+    run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9)])]), make)
+    VideoRepository(conn).save_script(1, "{}", "NVIDIA RTX Spark PCs Are Available Today")
+    respx.get(HW.url).respond(200, text=rss(first, second))
+    llm = ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, same=True)])])
+    report = run(cfg, conn, llm, make, now=NOW + timedelta(hours=3))
+    assert len(make.calls) == 1 and report.skipped_reason == "nothing worth a video"
+    assert "NVIDIA RTX Spark PCs Are Available Today" in llm.prompts[0]
+
+
+@respx.mock
+def test_game_title_not_in_story_gets_no_footage(cfg, conn):
+    # the AI names a game the story never mentions: no footage rather than possibly the wrong game's
+    story = ("DMZ Early Access Starts October 20", "https://news.xbox.com/en-us/dmz/", "Sun, 18 Oct 2026 08:00:00 +0000")
+    mock_feeds(hw=[], games=[story])
+    make = FakeMake(conn)
+    run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game="Call of Duty: Modern Warfare 4")])]), make)
+    assert make.calls[0][1] is None
+
+
+@respx.mock
+def test_full_title_from_ai_still_matches_story_that_uses_short_name(cfg, conn):
+    mock_feeds(hw=[], games=GAME_ITEMS)  # "Modern Warfare 4 launches October 23"
+    make = FakeMake(conn)
+    run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game="Call of Duty: Modern Warfare 4")])]), make)
     assert make.calls[0][1] == 4435490

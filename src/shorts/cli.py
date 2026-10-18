@@ -130,6 +130,8 @@ def main(argv: list[str] | None = None) -> int:
         settings = load_settings(args.config, os.environ)
     except ConfigError as exc:
         print(f"Setup problem: {exc}", file=sys.stderr)
+        if args.command == "run-once":
+            auto_cli.setup_problem(str(exc), args.log_file)
         return 1
     if args.command == "check-setup":
         return _check_setup(settings)

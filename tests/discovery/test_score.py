@@ -9,8 +9,8 @@ from tests.discovery.items import NOW, item
 S = DiscoverySettings()
 
 
-def verdict(interest=8, rumour=False, on_topic=True, game=None):
-    return Triage(index=0, interest=interest, rumour_or_leak=rumour, on_topic=on_topic, game_title=game,
+def verdict(interest=8, rumour=False, on_topic=True, game=None, same=False):
+    return Triage(index=0, interest=interest, rumour_or_leak=rumour, on_topic=on_topic, same_story_as_recent=same, game_title=game,
                   format=VideoFormat.NEWS_FLASH, reason="big launch")
 
 
@@ -71,3 +71,9 @@ def test_score_explanation_adds_up():
 def test_rumours_and_off_topic_score_zero(v):
     t = score_topic(item("Leak"), v, footage=True, coverage=1, settings=S, now=NOW)
     assert t.score == 0 and ("rumour" in t.explanation or "off topic" in t.explanation)
+
+
+def test_same_story_as_recent_scores_zero():
+    t = score_topic(item("RTX Spark Ignites Global Celebration"), verdict(interest=9, same=True), footage=False,
+                    coverage=1, settings=S, now=NOW)
+    assert t.score == 0 and "already covered" in t.explanation

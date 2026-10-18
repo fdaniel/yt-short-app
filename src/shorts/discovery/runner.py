@@ -13,11 +13,11 @@ from pathlib import Path
 from shorts.config import Settings
 from shorts.discovery.feeds import FeedItem, article_from_item, fetch_all
 from shorts.discovery.score import ScoredTopic, cheap_filter, coverage, score_topic
-from shorts.discovery.triage import triage
+from shorts.discovery.triage import excerpt, triage
 from shorts.llm.base import AllProvidersExhausted, InvalidOutput
 from shorts.models import TopicStatus
 from shorts.pipeline import PipelineDeps, PipelineError, VideoResult, make_video
-from shorts.sources.steam import find_steam_app_id
+from shorts.sources.steam import find_steam_app_id, normalise_title
 from shorts.storage.topics import TopicRepository
 
 log = logging.getLogger(__name__)
@@ -73,17 +73,15 @@ def _run(settings, deps, conn, now, free_bytes, make) -> RunReport:
         return RunReport((), "low disk space", 0)
 
     items = fetch_all(deps.http, d.feeds, max_bytes=settings.limits.max_html_bytes)
-    kept, rejected = cheap_filter(
-        items, seen_urls=topics.seen_urls(), recent_titles=topics.recent_titles(d.history_days, now),
-        settings=d, now=now,
-    )
+    recent = topics.recent_titles(d.history_days, now)
+    kept, rejected = cheap_filter(items, seen_urls=topics.seen_urls(), recent_titles=recent, settings=d, now=now)
     for it, reason in rejected:
         if reason != "already seen":
             topics.record(it.url, it.source, it.title, it.published, TopicStatus.SKIPPED, None, reason)
     if not kept:
         return RunReport((), "nothing new", len(items))
     try:
-        ranked = _rank(kept[: d.triage_batch], items, settings, deps, topics, now)
+        ranked = _rank(kept[: d.triage_batch], items, recent, settings, deps, topics, now)
     except (AllProvidersExhausted, InvalidOutput) as exc:
         log.warning("Rating stories failed: %s", exc)
         return RunReport((), AI_UNAVAILABLE, len(items))
@@ -92,14 +90,30 @@ def _run(settings, deps, conn, now, free_bytes, make) -> RunReport:
     return _make_best(ranked, settings, deps, conn, topics, today, make, len(items))
 
 
-def _rank(batch: list[FeedItem], items: list[FeedItem], settings: Settings, deps: PipelineDeps,
-          topics: TopicRepository, now: datetime) -> list[ScoredTopic]:
+def _mentions(it: FeedItem, game_title: str) -> bool:
+    """The story itself names the game (full title, or the part after "Series:"), so footage can't be invented."""
+    text = normalise_title(f"{it.title} {excerpt(it.content_html)}")
+    names = {normalise_title(game_title), normalise_title(game_title.split(":", 1)[-1])}
+    return any(name and f" {name} " in f" {text} " for name in names)
+
+
+def _steam_id(it: FeedItem, game_title: str | None, deps: PipelineDeps) -> int | None:
+    if not game_title:
+        return None
+    if not _mentions(it, game_title):
+        log.warning("AI named game %r but the story does not mention it; no footage", game_title)
+        return None
+    return find_steam_app_id(deps.http, game_title)
+
+
+def _rank(batch: list[FeedItem], items: list[FeedItem], recent: list[str], settings: Settings,
+          deps: PipelineDeps, topics: TopicRepository, now: datetime) -> list[ScoredTopic]:
     """Scored topics at or above min_score, best first; the rest are recorded as skipped."""
     d = settings.discovery
     ranked = []
-    for index, verdict in triage(batch, deps.llm).items():
+    for index, verdict in triage(batch, deps.llm, recent).items():
         it = batch[index]
-        steam_id = find_steam_app_id(deps.http, verdict.game_title) if verdict.game_title else None
+        steam_id = _steam_id(it, verdict.game_title, deps)
         scored = score_topic(it, verdict, footage=steam_id is not None, coverage=coverage(it, items, d),
                              settings=d, now=now)
         if scored.score < d.min_score:

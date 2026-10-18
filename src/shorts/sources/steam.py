@@ -150,17 +150,17 @@ def collect_steam_assets(
     return trailers + _screenshots(app, client, work_dir, settings)
 
 
-def _normalise_title(title: str) -> str:
+def normalise_title(title: str) -> str:
     return " ".join(re.sub(r"[^0-9a-z]+", " ", re.sub(r"[®™©]", "", title.casefold())).split())
 
 
 def find_steam_app_id(client: httpx.Client, game_title: str) -> int | None:
     """The app ID of the game whose store name is `game_title` (ignoring case, ®/™ and punctuation),
-    or whose name after the series prefix ("Series: Title") is, when exactly one game matches that way.
+    or, for Steam's top search result only, whose name after the series prefix ("Series: Title") is.
 
     No fuzzy matching: a near miss could put another game's footage in the video.
     """
-    wanted = _normalise_title(game_title)
+    wanted = normalise_title(game_title)
     if not wanted:
         return None
     url = str(httpx.URL(SEARCH_URL, params={"term": game_title, "l": "english", "cc": "US"}))
@@ -170,9 +170,10 @@ def find_steam_app_id(client: httpx.Client, game_title: str) -> int | None:
         log.warning("Steam search failed for %r: %s", game_title, exc)
         return None
     apps = [(int(i["id"]), str(i.get("name", ""))) for i in items if i.get("type") == "app" and "id" in i]
-    exact = [app_id for app_id, name in apps if _normalise_title(name) == wanted]
+    exact = [app_id for app_id, name in apps if normalise_title(name) == wanted]
     if exact:
         return exact[0]
-    # "Modern Warfare 4" for "Call of Duty: Modern Warfare 4": the part after the series name, if unambiguous
-    subtitle = [app_id for app_id, name in apps if ":" in name and _normalise_title(name.split(":", 1)[1]) == wanted]
-    return subtitle[0] if len(subtitle) == 1 else None
+    # "Modern Warfare 4" for "Call of Duty: Modern Warfare 4": only Steam's top result may match this way;
+    # "Black Ops" would otherwise find the 2010 game for a Black Ops 7 story
+    subtitle = [app_id for app_id, name in apps if ":" in name and normalise_title(name.split(":", 1)[1]) == wanted]
+    return subtitle[0] if subtitle == [apps[0][0]] else None

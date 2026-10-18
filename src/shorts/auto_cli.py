@@ -3,6 +3,8 @@
 import logging
 import os
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -19,6 +21,12 @@ from shorts.voice.tts import KokoroTTS
 log = logging.getLogger(__name__)
 LOG_MAX_BYTES = 5 * 1024 * 1024
 TASK_NAME = "TechShorts"
+DEFAULT_LOG = Settings.model_fields["data_dir"].default.expanduser() / "run.log"
+
+
+def _say(message: str) -> None:
+    print(message)
+    log.info(message)
 
 
 def _log_to_file(path: Path) -> logging.Handler:
@@ -32,13 +40,30 @@ def _log_to_file(path: Path) -> logging.Handler:
     return handler
 
 
-def run_once_command(settings: Settings, log_file: Path | None) -> int:
-    handler = _log_to_file(log_file or settings.data_dir / "run.log")
+@contextmanager
+def _file_log(path: Path) -> Iterator[None]:
+    handler = _log_to_file(path)
     try:
-        return _run_and_report(settings)
+        yield
     finally:
         logging.getLogger().removeHandler(handler)
         handler.close()
+
+
+def run_once_command(settings: Settings, log_file: Path | None) -> int:
+    with _file_log(log_file or settings.data_dir / "run.log"):
+        try:
+            return _run_and_report(settings)
+        except Exception:
+            log.exception("Run crashed")
+            print("Run crashed; details in the log.", file=sys.stderr)
+            return 1
+
+
+def setup_problem(message: str, log_file: Path | None) -> None:
+    """Scheduled runs throw away stderr: record setup problems where the owner will look."""
+    with _file_log(log_file or DEFAULT_LOG):
+        log.error("Setup problem, automatic mode cannot run: %s", message)
 
 
 def _run_and_report(settings: Settings) -> int:
@@ -49,14 +74,14 @@ def _run_and_report(settings: Settings) -> int:
             deps = PipelineDeps(http=http, llm=build_llm(settings, http), tts=tts)
             report = run_once(settings, deps, conn, now=datetime.now(UTC))
     except RunLocked:
-        print("Another run is still working; skipping this one.")
+        _say("Another run is still working; skipping this one.")
         return 0
     finally:
         conn.close()
     for result in report.made:
-        print(f"Made video #{result.video_id}: {result.video_path}")
+        _say(f"Made video #{result.video_id}: {result.video_path}")
     if report.skipped_reason:
-        print(f"No video this run: {report.skipped_reason}")
+        _say(f"No video this run: {report.skipped_reason}")
     log.info("Run finished: %d made, reason=%s, %d stories considered",
              len(report.made), report.skipped_reason, report.considered)
     return 0

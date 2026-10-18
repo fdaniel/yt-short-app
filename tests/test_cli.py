@@ -116,3 +116,26 @@ def test_topics_lists_latest_with_explanations(tmp_path, capsys, monkeypatch):
     out = capsys.readouterr().out
     assert "Newest" in out and "MW4 launches" in out and "Old story" not in out
     assert "interest 1.00x0.5" in out and "made" in out
+
+
+def test_run_once_crash_is_logged(tmp_path, monkeypatch):
+    import sqlite3
+    assert _run_once_with(monkeypatch, tmp_path, sqlite3.OperationalError("database is locked")) == 1
+    log = (tmp_path / "data" / "run.log").read_text()
+    assert "Run crashed" in log and "database is locked" in log
+
+
+def test_run_once_made_path_and_lock_are_logged(tmp_path, monkeypatch):
+    made = VideoResult(4, tmp_path / "exports/4/video.mp4", tmp_path / "exports/4/metadata.json")
+    _run_once_with(monkeypatch, tmp_path, RunReport((made,), None, 12))
+    _run_once_with(monkeypatch, tmp_path, RunLocked("busy"))
+    log = (tmp_path / "data" / "run.log").read_text()
+    assert "exports/4/video.mp4" in log and "Another run is still working" in log
+
+
+def test_run_once_setup_problem_is_logged(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)
+    log = tmp_path / "fallback.log"
+    assert cli.main(["run-once", "--config", str(write_config(tmp_path)), "--log-file", str(log)]) == 1
+    assert "GEMINI_API_KEY" in log.read_text()
