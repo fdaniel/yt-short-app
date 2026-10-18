@@ -38,6 +38,12 @@ class TopicRepository:
         with self._conn:
             self._conn.execute("UPDATE topics SET video_id = ?, status = ? WHERE id = ?", (video_id, status.value, topic_id))
 
+    def latest(self, n: int) -> list[sqlite3.Row]:
+        """The `n` most recently recorded topics, newest first (status, score, title, source, explanation)."""
+        return self._conn.execute(
+            "SELECT status, score, title, source, explanation, created_at FROM topics ORDER BY id DESC LIMIT ?", (n,)
+        ).fetchall()
+
     def forget(self, url: str) -> None:
         """Drop a topic so a later run can consider it again (e.g. the AI quota ran out mid-video)."""
         with self._conn:

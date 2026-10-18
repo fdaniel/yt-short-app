@@ -73,6 +73,43 @@ Output goes to `~/tech-shorts-data/exports/<id>/` (`video.mp4`, `metadata.json`)
 If a publisher ever claims one of your videos, that publisher's trailers can be blocked
 (Telegram command coming in the next step; for now: `blocked_publishers` table).
 
+## Automatic mode
+
+Instead of pasting URLs, let the app find the news itself:
+
+```bash
+python -m shorts run-once
+```
+
+Each run:
+
+1. reads the official feeds (NVIDIA Newsroom, NVIDIA Blog, AMD press releases, Xbox Wire, PlayStation Blog),
+2. drops stories already seen or already covered, older than 48 h, or off-topic for gamers (earnings, board news, podcasts…),
+3. asks the free AI to rate up to 8 remaining stories **in one call**, and scores them
+   (freshness, interest, Steam footage available, covered by several official sources),
+4. makes **one** video from the best story, if it scores at least 0.55, finding the game on Steam by its exact name.
+
+It stops by itself at **3 videos per day**, when free disk space drops under 10 GB, or when the free AI quota is used up
+(the story is then retried on a later run). Two runs never overlap. Nothing is ever published: videos wait in
+`~/tech-shorts-data/exports/<id>/` for you.
+
+See what it considered and why:
+
+```bash
+python -m shorts topics --last 10
+```
+
+Log: `~/tech-shorts-data/run.log`.
+
+### Run it every 3 hours
+
+```bash
+python -m shorts schedule-help
+```
+
+prints one `schtasks` command: paste it into **PowerShell** (Windows, not Ubuntu). It runs while you are logged in
+to Windows. The same output shows the command to switch it off.
+
 ## Settings
 
 `config.yaml` controls voice, narration length (`min_words`/`max_words`, tuned to ~2 words per second),

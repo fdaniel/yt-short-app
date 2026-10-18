@@ -1,4 +1,4 @@
-"""Command line: `python -m shorts make-video ...` and `python -m shorts check-setup`."""
+"""Command line: `python -m shorts make-video|check-setup|run-once|schedule-help|topics`."""
 
 import argparse
 import importlib.util
@@ -12,6 +12,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
+from shorts import auto_cli
 from shorts.config import ConfigError, Settings, load_settings
 from shorts.llm.base import InvalidOutput, ProviderUnavailable
 from shorts.llm.chain import build_llm
@@ -40,6 +41,14 @@ def _parser() -> argparse.ArgumentParser:
     make.add_argument("--config", default="config.yaml", type=Path)
     check = sub.add_parser("check-setup", help="check tools, keys and folders")
     check.add_argument("--config", default="config.yaml", type=Path)
+    auto = sub.add_parser("run-once", help="automatic mode: find the best fresh story and make its video")
+    auto.add_argument("--config", default="config.yaml", type=Path)
+    auto.add_argument("--log-file", type=Path, help="default: <data_dir>/run.log")
+    schedule = sub.add_parser("schedule-help", help="print the Windows command that runs automatic mode every 3 hours")
+    schedule.add_argument("--config", default="config.yaml", type=Path)
+    topics = sub.add_parser("topics", help="recent stories and why they were picked or skipped")
+    topics.add_argument("--last", type=int, default=10)
+    topics.add_argument("--config", default="config.yaml", type=Path)
     return parser
 
 
@@ -124,4 +133,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if args.command == "check-setup":
         return _check_setup(settings)
+    if args.command == "run-once":
+        return auto_cli.run_once_command(settings, args.log_file)
+    if args.command == "schedule-help":
+        return auto_cli.schedule_help(args.config)
+    if args.command == "topics":
+        return auto_cli.topics_command(settings, args.last)
     return _make_video(args, settings)
