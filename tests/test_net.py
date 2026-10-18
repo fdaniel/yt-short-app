@@ -3,7 +3,14 @@ import pytest
 import respx
 
 from shorts.media.ffmpeg import download_hls
-from shorts.net import DownloadTooLarge, UnsafeURLError, download_file, fetch_text, validate_public_url
+from shorts.net import (
+    DownloadTooLarge,
+    UnsafeURLError,
+    build_http_client,
+    download_file,
+    fetch_text,
+    validate_public_url,
+)
 
 
 @pytest.mark.parametrize(
@@ -71,3 +78,12 @@ def test_download_file_cleans_partial_on_cap(tmp_path):
 def test_download_hls_rejects_unsafe_url(tmp_path):
     with pytest.raises(UnsafeURLError):
         download_hls("file:///etc/passwd", tmp_path / "x.mp4", max_seconds=5, timeout_s=10)
+
+
+@respx.mock
+def test_redirect_to_private_address_is_refused(settings):
+    respx.get("https://example.com/a").respond(302, headers={"Location": "http://127.0.0.1/admin"})
+    admin = respx.get("http://127.0.0.1/admin").respond(200, text="secret")
+    with build_http_client(settings) as client, pytest.raises(UnsafeURLError):
+        fetch_text(client, "https://example.com/a", max_bytes=1000)
+    assert admin.call_count == 0

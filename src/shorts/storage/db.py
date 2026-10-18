@@ -43,6 +43,15 @@ MIGRATIONS: tuple[str, ...] = (
 )
 
 
+def _migrate(conn: sqlite3.Connection, version: int, sql: str) -> None:
+    """Apply one migration and record it in a single transaction: all of it or none of it."""
+    try:
+        conn.executescript(f"BEGIN;\n{sql}\n;INSERT INTO schema_version (version) VALUES ({int(version)});\nCOMMIT;")
+    except sqlite3.Error:
+        conn.rollback()
+        raise
+
+
 def connect(db_path: Path) -> sqlite3.Connection:
     """Open (creating if needed) the database and apply pending migrations."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -53,7 +62,5 @@ def connect(db_path: Path) -> sqlite3.Connection:
     current = conn.execute("SELECT max(version) FROM schema_version").fetchone()[0] or 0
     for version, sql in enumerate(MIGRATIONS, start=1):
         if version > current:
-            with conn:
-                conn.executescript(sql)
-                conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
+            _migrate(conn, version, sql)
     return conn

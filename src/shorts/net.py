@@ -36,11 +36,17 @@ def validate_public_url(url: str) -> str:
     return url
 
 
+def _check_request(request: httpx.Request) -> None:
+    """Runs for every request the client sends, including each redirect hop."""
+    validate_public_url(str(request.url))
+
+
 def build_http_client(settings: Settings) -> httpx.Client:
     return httpx.Client(
         timeout=settings.limits.http_timeout_s,
         follow_redirects=True,
         headers={"User-Agent": USER_AGENT},
+        event_hooks={"request": [_check_request]},
     )
 
 
