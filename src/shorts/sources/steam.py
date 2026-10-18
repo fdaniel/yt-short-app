@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,6 +17,8 @@ from shorts.net import DownloadTooLarge, UnsafeURLError, download_file, fetch_te
 log = logging.getLogger(__name__)
 
 APPDETAILS_URL = "https://store.steampowered.com/api/appdetails?appids={app_id}&cc=us&l=english"
+SEARCH_URL = "https://store.steampowered.com/api/storesearch/"
+SEARCH_MAX_BYTES = 1_000_000
 MAX_TRAILERS = 2
 MAX_SCREENSHOTS = 4
 TRAILER_TERMS = "steam-store-promo: short news-coverage excerpts (owner decision, option A)"
@@ -145,3 +148,27 @@ def collect_steam_assets(
         log.info("Trailers from %s are blocked; using screenshots only", app.publishers)
     trailers = [] if publisher_blocked else _trailers(app, client, work_dir, settings)
     return trailers + _screenshots(app, client, work_dir, settings)
+
+
+def _normalise_title(title: str) -> str:
+    return " ".join(re.sub(r"[^0-9a-z]+", " ", re.sub(r"[®™©]", "", title.casefold())).split())
+
+
+def find_steam_app_id(client: httpx.Client, game_title: str) -> int | None:
+    """The app ID of the game whose store name is exactly `game_title` (ignoring case, ®/™ and punctuation).
+
+    Exact match only: a near miss could put another game's footage in the video.
+    """
+    wanted = _normalise_title(game_title)
+    if not wanted:
+        return None
+    url = str(httpx.URL(SEARCH_URL, params={"term": game_title, "l": "english", "cc": "US"}))
+    try:
+        items = json.loads(fetch_text(client, url, max_bytes=SEARCH_MAX_BYTES)).get("items", [])
+    except (httpx.HTTPError, ValueError, AttributeError, DownloadTooLarge, UnsafeURLError) as exc:
+        log.warning("Steam search failed for %r: %s", game_title, exc)
+        return None
+    for item in items:
+        if item.get("type") == "app" and _normalise_title(str(item.get("name", ""))) == wanted:
+            return int(item["id"])
+    return None

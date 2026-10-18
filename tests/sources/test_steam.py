@@ -109,3 +109,44 @@ def test_single_failed_download_is_skipped(tmp_path, settings, monkeypatch, synt
     shots = [a for a in collect_steam_assets(app, httpx.Client(), tmp_path, settings, set())
              if a.kind == AssetKind.SCREENSHOT]
     assert len(shots) == 1
+
+
+SEARCH = "https://store.steampowered.com/api/storesearch/"
+
+
+def _search_fixture():
+    respx.get(url__startswith=SEARCH).respond(200, json=json.loads((FIXTURES / "steam_search_mw4.json").read_text()))
+
+
+@respx.mock
+def test_exact_title_matches():
+    _search_fixture()
+    assert steam.find_steam_app_id(httpx.Client(), "Call of Duty: Modern Warfare 4") == 4435490
+
+
+@respx.mock
+def test_partial_title_does_not_match():
+    _search_fixture()
+    assert steam.find_steam_app_id(httpx.Client(), "Modern Warfare 4") is None
+
+
+@respx.mock
+def test_older_game_not_matched():
+    _search_fixture()
+    assert steam.find_steam_app_id(httpx.Client(), "Call of Duty 4") is None
+
+
+@respx.mock
+def test_search_failure_returns_none():
+    respx.get(url__startswith=SEARCH).respond(503)
+    assert steam.find_steam_app_id(httpx.Client(), "Call of Duty: Modern Warfare 4") is None
+
+
+@respx.mock
+def test_search_garbage_returns_none():
+    respx.get(url__startswith=SEARCH).respond(200, text="<html>")
+    assert steam.find_steam_app_id(httpx.Client(), "Call of Duty: Modern Warfare 4") is None
+
+
+def test_blank_title_does_not_search():
+    assert steam.find_steam_app_id(httpx.Client(), "  ") is None

@@ -1,0 +1,60 @@
+{
+    "total": 3,
+    "items": [
+        {
+            "type": "app",
+            "name": "Call of Duty\u00ae: Modern Warfare\u00ae 4",
+            "id": 4435490,
+            "price": {
+                "currency": "USD",
+                "initial": 6999,
+                "final": 6999
+            },
+            "tiny_image": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/4435490/50d218e79ead2650bc6b7360995cc8dd3fbe2c29/capsule_231x87.jpg?t=1792214069",
+            "metascore": "",
+            "platforms": {
+                "windows": true,
+                "mac": false,
+                "linux": false
+            },
+            "streamingvideo": false,
+            "controller_support": "full"
+        },
+        {
+            "type": "app",
+            "name": "Call of Duty\u00ae 4: Modern Warfare\u00ae (2007)",
+            "id": 7940,
+            "price": {
+                "currency": "USD",
+                "initial": 1999,
+                "final": 1999
+            },
+            "tiny_image": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/7940/capsule_231x87.jpg?t=1780962383",
+            "metascore": "92",
+            "platforms": {
+                "windows": true,
+                "mac": true,
+                "linux": false
+            },
+            "streamingvideo": false
+        },
+        {
+            "type": "app",
+            "name": "Call of Duty\u00ae: Modern Warfare\u00ae 3 (2011) Collection 4: Final Assault",
+            "id": 42698,
+            "price": {
+                "currency": "USD",
+                "initial": 1499,
+                "final": 1499
+            },
+            "tiny_image": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/42698/capsule_231x87.jpg?t=1692032358",
+            "metascore": "",
+            "platforms": {
+                "windows": true,
+                "mac": true,
+                "linux": false
+            },
+            "streamingvideo": false
+        }
+    ]
+}
