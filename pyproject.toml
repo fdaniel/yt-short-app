@@ -20,6 +20,7 @@ dependencies = [
     "scenedetect>=0.6.4",
     "opencv-python-headless>=4.9",
     "pillow>=10",
+    "feedparser>=6",
 ]
 
 [project.optional-dependencies]

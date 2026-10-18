@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+<channel>
+<title>NVIDIA Blog</title>
+<link>https://blogs.nvidia.com</link>
+<item>
+  <title>Dial Up the Cloud: NVIDIA DLSS 4.5 Controls Arrive &#8211; GeForce NOW</title>
+  <link>https://blogs.nvidia.com/blog/geforce-now-dlss-4-5/</link>
+  <pubDate>Fri, 16 Oct 2026 13:00:00 +0000</pubDate>
+  <description><![CDATA[Short summary.]]></description>
+  <content:encoded><![CDATA[<p>NVIDIA today announced DLSS 4.5 controls for GeForce NOW members, letting players choose image quality and frame generation settings in the cloud. The update arrives on October 20 for Ultimate members and supports more than 150 games at launch, including the newest releases. </p><p>NVIDIA today announced DLSS 4.5 controls for GeForce NOW members, letting players choose image quality and frame generation settings in the cloud. The update arrives on October 20 for Ultimate members and supports more than 150 games at launch, including the newest releases. </p><p>NVIDIA today announced DLSS 4.5 controls for GeForce NOW members, letting players choose image quality and frame generation settings in the cloud. The update arrives on October 20 for Ultimate members and supports more than 150 games at launch, including the newest releases. </p>]]></content:encoded>
+</item>
+<item>
+  <title><![CDATA[RTX Spark Ignites Global Celebration]]></title>
+  <link>https://blogs.nvidia.com/blog/rtx-spark-celebration/</link>
+  <pubDate>Sat, 17 Oct 2026 21:00:13 +0000</pubDate>
+  <description><![CDATA[Short summary.]]></description>
+</item>
+<item>
+  <title>An item without a date</title>
+  <link>https://blogs.nvidia.com/blog/no-date/</link>
+</item>
+</channel>
+</rss>

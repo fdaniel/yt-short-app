@@ -31,3 +31,19 @@ limits:
   max_hls_seconds: 180
   ffmpeg_timeout_s: 600
   http_timeout_s: 20
+
+# Automatic mode (python -m shorts run-once). Defaults shown; uncomment to change.
+# discovery:
+#   max_videos_per_day: 3      # local calendar day, failed videos don't count
+#   videos_per_run: 1
+#   max_age_h: 48              # ignore news older than this
+#   min_score: 0.55            # 0-1; below this, no video is made
+#   min_free_gb: 10            # stop making videos below this much free disk space
+#   history_days: 14           # don't repeat a story covered in this window
+#   weights: {freshness: 0.3, interest: 0.5, footage: 0.1, coverage: 0.1}
+#   feeds:                     # replaces the whole default list when set
+#     - {name: NVIDIA Newsroom, url: "https://nvidianews.nvidia.com/releases.xml", topic: hardware}
+#     - {name: NVIDIA Blog, url: "https://blogs.nvidia.com/feed/", topic: hardware}
+#     - {name: AMD Press Releases, url: "https://ir.amd.com/news-events/press-releases/rss", topic: hardware}
+#     - {name: Xbox Wire, url: "https://news.xbox.com/en-us/feed/", topic: gaming}
+#     - {name: PlayStation Blog, url: "https://blog.playstation.com/feed/", topic: gaming}

@@ -1,6 +1,7 @@
 """Settings: YAML for behaviour, environment for secrets."""
 
 from collections.abc import Mapping
+from typing import Literal
 from pathlib import Path
 
 import yaml
@@ -48,6 +49,46 @@ class LimitSettings(_Frozen):
     http_timeout_s: int = 20
 
 
+class FeedSource(_Frozen):
+    name: str
+    url: str
+    topic: Literal["hardware", "gaming"]
+
+
+DEFAULT_FEEDS = (
+    FeedSource(name="NVIDIA Newsroom", url="https://nvidianews.nvidia.com/releases.xml", topic="hardware"),
+    FeedSource(name="NVIDIA Blog", url="https://blogs.nvidia.com/feed/", topic="hardware"),
+    FeedSource(name="AMD Press Releases", url="https://ir.amd.com/news-events/press-releases/rss", topic="hardware"),
+    FeedSource(name="Xbox Wire", url="https://news.xbox.com/en-us/feed/", topic="gaming"),
+    FeedSource(name="PlayStation Blog", url="https://blog.playstation.com/feed/", topic="gaming"),
+)
+
+
+class ScoreWeights(_Frozen):
+    freshness: float = 0.3
+    interest: float = 0.5
+    footage: float = 0.1
+    coverage: float = 0.1
+
+
+class DiscoverySettings(_Frozen):
+    feeds: tuple[FeedSource, ...] = DEFAULT_FEEDS
+    max_age_h: float = 48
+    max_videos_per_day: int = 3
+    videos_per_run: int = 1
+    max_attempts_per_run: int = 2
+    triage_batch: int = 8
+    min_score: float = 0.55
+    min_free_gb: float = 10
+    history_days: int = 14
+    duplicate_similarity: float = 0.5
+    weights: ScoreWeights = ScoreWeights()
+    exclude_keywords: tuple[str, ...] = (
+        "financial results", "quarter", "dividend", "board of directors", "appoints", "conference call",
+        "podcast", "share of the week", "for southeast asia", "earnings",
+    )
+
+
 class Settings(_Frozen):
     data_dir: Path = Path("~/tech-shorts-data")
     music_dir: Path = Path("assets/music")
@@ -58,6 +99,7 @@ class Settings(_Frozen):
     voice: VoiceSettings = VoiceSettings()
     video: VideoSettings = VideoSettings()
     limits: LimitSettings = LimitSettings()
+    discovery: DiscoverySettings = DiscoverySettings()
 
     @field_validator("data_dir", "music_dir", "font_file")
     @classmethod
