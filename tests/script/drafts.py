@@ -1,5 +1,5 @@
 from shorts.config import VideoSettings
-from shorts.script.schema import Claim, ScriptDraft
+from shorts.script.schema import CardFact, Claim, ScriptDraft
 from shorts.sources.article import Article
 
 SOURCE = "The RTX 5090 launches January 30, 2025 at $1,999. It has 32GB of GDDR7 memory."
@@ -20,7 +20,7 @@ def draft(**overrides) -> ScriptDraft:
         description="NVIDIA's new flagship GPU.",
         hashtags=["#nvidia", "#rtx5090", "#gpu"],
         claims=[Claim(text="launches January 30, 2025 at $1,999", source_quote="launches January 30, 2025 at $1,999")],
-        card_facts=[],
+        card_facts=[CardFact(label="Price", value="$1,999"), CardFact(label="Memory", value="32GB GDDR7")],
     )
     fields.update(overrides)
     return ScriptDraft(**fields)

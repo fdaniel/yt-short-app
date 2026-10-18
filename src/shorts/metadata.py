@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -13,6 +14,8 @@ MAX_TITLE = 100
 MAX_DESCRIPTION = 5000
 MAX_HASHTAGS = 5
 BANNED_WORDS = ("viral", "guarantee")
+FALLBACK_HASHTAGS = ("#TechNews", "#Shorts")
+_TAG = re.compile(r"#?[A-Za-z][A-Za-z0-9_]{1,29}")
 
 
 @dataclass(frozen=True)
@@ -40,12 +43,16 @@ def _titles(draft: ScriptDraft, article: Article) -> tuple[str, ...]:
 
 
 def _hashtags(draft: ScriptDraft) -> tuple[str, ...]:
+    """Well-formed tags only: a model sometimes leaks prose or JSON into this field."""
     tags = []
     for raw in draft.hashtags:
-        tag = "#" + _clean(raw).lstrip("#").replace(" ", "")
-        if len(tag) > 1 and _allowed(tag) and tag.lower() not in {t.lower() for t in tags}:
-            tags.append(tag)
-    return tuple(tags[:MAX_HASHTAGS])
+        for token in re.split(r"[\s,\[\]]+", raw):
+            if not _TAG.fullmatch(token) or (" " in raw.strip() and not token.startswith("#")):
+                continue
+            tag = "#" + token.lstrip("#")
+            if _allowed(tag) and tag.lower() not in {t.lower() for t in tags}:
+                tags.append(tag)
+    return tuple(tags[:MAX_HASHTAGS]) or FALLBACK_HASHTAGS
 
 
 def _credits(article: Article, assets: list[Asset]) -> list[str]:

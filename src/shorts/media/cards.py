@@ -7,7 +7,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from shorts.script.schema import CardFact
 
 CANVAS = (1080, 1920)
-SAFE_BOX = (80, 250, 900, 1350)  # left, top, right, bottom: clear of the Shorts UI
+SAFE_BOX = (80, 250, 900, 1080)  # left, top, right, bottom: clear of the Shorts UI and the captions
 BACKGROUND = (11, 15, 20)
 ACCENT = (61, 220, 151)
 TEXT = (245, 247, 250)
@@ -67,9 +67,10 @@ def render_fact_card(title: str, facts: list[CardFact], out: Path, font_file: Pa
     row_h = (bottom - y - 40) // len(facts)
     for fact in facts:
         label_font, label_lines, _ = _fit(draw, fact.label.upper(), font_file, right - left, row_h // 3, 40, 24)
-        value_font, value_lines, _ = _fit(draw, fact.value, font_file, right - left, row_h // 2, 72, 32)
+        value_font, value_lines, value_h = _fit(draw, fact.value, font_file, right - left, row_h // 2, 72, 32)
         draw.text((left, y + 40), label_lines[0], font=label_font, fill=MUTED)
-        draw.text((left, y + 40 + row_h // 3), value_lines[0], font=value_font, fill=TEXT)
+        for i, line in enumerate(value_lines):
+            draw.text((left, y + 40 + row_h // 3 + i * value_h), line, font=value_font, fill=TEXT)
         y += row_h
     image.save(out)
     return out

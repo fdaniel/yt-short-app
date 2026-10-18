@@ -42,7 +42,17 @@ def _numbers(text: str) -> list[str]:
 
 
 def numbers_ungrounded(draft: ScriptDraft, source_text: str) -> list[str]:
-    """Numbers said in the narration that never appear in the source."""
+    """Numbers said in the narration or shown on cards that never appear in the source."""
     known = set(_numbers(source_text))
-    spoken = _numbers(" ".join(narration_lines(draft)))
+    on_cards = [f"{fact.label} {fact.value}" for fact in draft.card_facts]
+    spoken = _numbers(" ".join(narration_lines(draft) + on_cards))
     return list(dict.fromkeys(n for n in spoken if n not in known))
+
+
+MIN_CARD_FACTS = 2
+
+
+def card_problems(draft: ScriptDraft) -> list[str]:
+    if len(draft.card_facts) < MIN_CARD_FACTS:
+        return [f"card_facts has {len(draft.card_facts)} entries; give {MIN_CARD_FACTS} to 6 from the SOURCE"]
+    return []

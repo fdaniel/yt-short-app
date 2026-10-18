@@ -3,7 +3,7 @@
 from shorts.config import VideoSettings
 from shorts.llm.base import LLMProvider
 from shorts.models import VideoFormat
-from shorts.script.checks import length_problems, numbers_ungrounded, quotes_missing
+from shorts.script.checks import card_problems, length_problems, numbers_ungrounded, quotes_missing
 from shorts.script.prompts import build_factcheck_prompt, build_script_prompt
 from shorts.script.schema import FactCheckResult, ScriptDraft
 from shorts.sources.article import Article
@@ -20,7 +20,7 @@ class ScriptRejected(Exception):
 def _cheap_problems(draft: ScriptDraft, article: Article, video: VideoSettings) -> list[str]:
     missing = [f"source_quote not found verbatim in SOURCE: {q!r}" for q in quotes_missing(draft, article.text)]
     numbers = [f"number not in SOURCE: {n}" for n in numbers_ungrounded(draft, article.text)]
-    return length_problems(draft, video) + missing + numbers
+    return length_problems(draft, video) + card_problems(draft) + missing + numbers
 
 
 def _verdict_problems(draft: ScriptDraft, result: FactCheckResult) -> list[str]:

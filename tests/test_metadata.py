@@ -54,3 +54,22 @@ def test_write_metadata_json(tmp_path):
     path = write_metadata(m, tmp_path / "metadata.json")
     assert json.loads(path.read_text())["title"] == m.title
     assert isinstance(m, VideoMetadata)
+
+
+def test_hashtags_survive_garbled_model_output():
+    # verbatim from a real gemini-flash-latest run on 2026-10-18
+    junk = [
+        "#NVIDIA,#RTXSpark,#GamingLaptop,#TechNews,#PCGaming],",
+        "claims往:[{",
+        "claims to fulfill schema requirements:}]} 400 error prevent:",
+        "Do not include any extra text outside of the JSON string.",
+        "Do not generate any control token (such as \\n and \\t) at any",
+    ]
+    m = build_metadata(draft(hashtags=junk), article(), [])
+    assert m.hashtags == ("#NVIDIA", "#RTXSpark", "#GamingLaptop", "#TechNews", "#PCGaming")
+    assert "claims" not in m.description and "JSON" not in m.description
+
+
+def test_hashtags_fall_back_when_all_unusable():
+    m = build_metadata(draft(hashtags=["not a tag at all", "{}", "also bad text"]), article(), [])
+    assert m.hashtags == ("#TechNews", "#Shorts")

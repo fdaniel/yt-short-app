@@ -1,12 +1,13 @@
 from shorts.config import VideoSettings
 from shorts.script.checks import (
+    card_problems,
     length_problems,
     narration_lines,
     numbers_ungrounded,
     quotes_missing,
     word_count,
 )
-from shorts.script.schema import Claim
+from shorts.script.schema import CardFact, Claim
 from tests.script.drafts import SOURCE, draft
 
 
@@ -64,3 +65,18 @@ def test_typographic_quotes_and_dashes_match_ascii():
 def test_narration_lines_strip_emoji_and_markup():
     d = draft(hook="DLSS 5 \U0001F680 {is} here\\")
     assert narration_lines(d)[0] == "DLSS 5 is here"
+
+
+def test_invented_number_on_card_flagged():
+    d = draft(card_facts=[CardFact(label="Boost clock", value="2.9 GHz"), CardFact(label="Price", value="$1,999")])
+    assert numbers_ungrounded(d, SOURCE) == ["2.9"]
+
+
+def test_too_few_card_facts_flagged():
+    # a real run returned none and the video was one static card for 40 s
+    d = draft(card_facts=[CardFact(label="Price", value="$1,999")])
+    assert any("card_facts" in p for p in card_problems(d))
+
+
+def test_enough_card_facts_pass():
+    assert card_problems(draft()) == []

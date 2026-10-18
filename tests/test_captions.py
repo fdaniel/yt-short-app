@@ -40,3 +40,15 @@ def test_ass_file(tmp_path):
     assert "0:00:01.50" in txt and "0:00:03.00" in txt
     assert "{x}" not in txt
     assert "Footage: CD PROJEKT RED / Steam" in txt
+
+
+def test_captions_sit_below_card_text(tmp_path):
+    # captions used to land on top of the hook card's text
+    from shorts.captions import CAPTION_MARGIN_V, CAPTION_SIZE
+    from shorts.media.cards import CANVAS, SAFE_BOX
+
+    two_lines_top = CANVAS[1] - CAPTION_MARGIN_V - 2 * CAPTION_SIZE * 1.25
+    assert two_lines_top > SAFE_BOX[3]
+    txt = write_ass([CaptionChunk("Hi", 0, 1)], "c", tmp_path / "c.ass").read_text()
+    assert f",{CAPTION_MARGIN_V},1" in txt.split("Style: Caption")[1].splitlines()[0]
+    assert CANVAS[1] - CAPTION_MARGIN_V <= 1450  # stays clear of the Shorts title/buttons overlay

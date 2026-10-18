@@ -6,6 +6,9 @@ from pathlib import Path
 from shorts.text import clean_text
 from shorts.voice.narration import Narration
 
+CAPTION_SIZE = 78
+CAPTION_MARGIN_V = 520  # bottom edge at y=1400: under card text, above the Shorts title/buttons
+
 _HEADER = """[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -15,7 +18,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,{font},78,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,6,0,2,120,200,700,1
+Style: Caption,{font},{size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,6,0,2,120,200,{margin_v},1
 Style: Credit,{font},34,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,3,0,7,60,60,120,1
 
 [Events]
@@ -76,5 +79,5 @@ def write_ass(chunks: list[CaptionChunk], credit_text: str, out_path: Path, font
     end = max((c.end for c in chunks), default=0.0)
     events = [_dialogue("Credit", 0.0, end, credit_text)]
     events += [_dialogue("Caption", c.start, c.end, c.text) for c in chunks]
-    out_path.write_text(_HEADER.format(font=font_name) + "\n".join(events) + "\n", encoding="utf-8")
+    out_path.write_text(_HEADER.format(font=font_name, size=CAPTION_SIZE, margin_v=CAPTION_MARGIN_V) + "\n".join(events) + "\n", encoding="utf-8")
     return out_path

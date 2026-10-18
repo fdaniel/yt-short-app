@@ -32,3 +32,12 @@ def test_text_stays_in_safe_zone(tmp_path, font_file):
     img = Image.open(out).convert("L")
     bottom_band = img.crop((0, 1400, 1080, 1920))
     assert bottom_band.getextrema()[1] < 80  # nothing bright drawn under the Shorts UI
+
+
+def test_long_fact_value_is_not_cut_to_one_line(tmp_path, font_file):
+    # a real run showed "ASUS, Dell, HP," for "ASUS, Dell, HP, Lenovo, Microsoft, MSI"
+    facts = [CardFact(label="Partners", value="ASUS, Dell, HP, Lenovo, Microsoft, MSI and Razer")]
+    image = Image.open(render_fact_card("RTX Spark", facts, tmp_path / "f.png", font_file)).convert("L")
+    body = image.crop((0, 450, image.width, 1080)).point(lambda v: 255 if v > 230 else 0)
+    top, bottom = body.getbbox()[1], body.getbbox()[3]
+    assert bottom - top > 120  # more than one line of value text

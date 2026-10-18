@@ -30,7 +30,7 @@ Rules:
 - Plain text only: no emoji, no hashtags inside the narration.
 - Do not call anything "viral", promise results, or use clickbait that distorts the facts.
 - Titles: 3 honest options under 100 characters. Hashtags: 3 to 5, relevant only.
-- card_facts: up to 6 short label/value pairs (specs, prices, dates) taken from the SOURCE.
+- card_facts: 2 to 6 short label/value pairs (specs, prices, dates, partners) taken from the SOURCE.
 - Format: {FORMAT_GUIDES[fmt]}
 """
     fixes = ""
