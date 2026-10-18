@@ -155,9 +155,10 @@ def _normalise_title(title: str) -> str:
 
 
 def find_steam_app_id(client: httpx.Client, game_title: str) -> int | None:
-    """The app ID of the game whose store name is exactly `game_title` (ignoring case, ®/™ and punctuation).
+    """The app ID of the game whose store name is `game_title` (ignoring case, ®/™ and punctuation),
+    or whose name after the series prefix ("Series: Title") is, when exactly one game matches that way.
 
-    Exact match only: a near miss could put another game's footage in the video.
+    No fuzzy matching: a near miss could put another game's footage in the video.
     """
     wanted = _normalise_title(game_title)
     if not wanted:
@@ -168,7 +169,10 @@ def find_steam_app_id(client: httpx.Client, game_title: str) -> int | None:
     except (httpx.HTTPError, ValueError, AttributeError, DownloadTooLarge, UnsafeURLError) as exc:
         log.warning("Steam search failed for %r: %s", game_title, exc)
         return None
-    for item in items:
-        if item.get("type") == "app" and _normalise_title(str(item.get("name", ""))) == wanted:
-            return int(item["id"])
-    return None
+    apps = [(int(i["id"]), str(i.get("name", ""))) for i in items if i.get("type") == "app" and "id" in i]
+    exact = [app_id for app_id, name in apps if _normalise_title(name) == wanted]
+    if exact:
+        return exact[0]
+    # "Modern Warfare 4" for "Call of Duty: Modern Warfare 4": the part after the series name, if unambiguous
+    subtitle = [app_id for app_id, name in apps if ":" in name and _normalise_title(name.split(":", 1)[1]) == wanted]
+    return subtitle[0] if len(subtitle) == 1 else None

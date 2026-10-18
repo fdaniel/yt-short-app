@@ -125,9 +125,25 @@ def test_exact_title_matches():
 
 
 @respx.mock
+def test_title_after_series_name_matches():
+    # articles say "Modern Warfare 4"; Steam says "Call of Duty®: Modern Warfare® 4"
+    _search_fixture()
+    assert steam.find_steam_app_id(httpx.Client(), "Modern Warfare 4") == 4435490
+
+
+@respx.mock
 def test_partial_title_does_not_match():
     _search_fixture()
-    assert steam.find_steam_app_id(httpx.Client(), "Modern Warfare 4") is None
+    assert steam.find_steam_app_id(httpx.Client(), "Warfare 4") is None
+
+
+@respx.mock
+def test_ambiguous_subtitle_does_not_match():
+    respx.get(url__startswith=SEARCH).respond(200, json={"items": [
+        {"type": "app", "name": "Galaxy: Origins", "id": 1},
+        {"type": "app", "name": "Kingdom: Origins", "id": 2},
+    ]})
+    assert steam.find_steam_app_id(httpx.Client(), "Origins") is None
 
 
 @respx.mock
