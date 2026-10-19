@@ -33,3 +33,15 @@ def test_factcheck_prompt_lists_claims_and_source():
 
 def test_prompt_forbids_emoji():
     assert "emoji" in build_script_prompt(article(), VideoFormat.NEWS_FLASH, [], VideoSettings())
+
+
+def test_prompt_asks_for_generic_footage_search_terms():
+    p = build_script_prompt(article(), VideoFormat.NEWS_FLASH, [], VideoSettings())
+    assert "footage_queries" in p and "no brand" in p
+
+
+def test_footage_queries_are_cleaned():
+    from shorts.script.schema import ScriptDraft
+
+    d = draft().model_copy(update={"footage_queries": ["  gaming   laptop ", "", "x" * 80]})
+    assert ScriptDraft.model_validate(d.model_dump()).footage_queries == ["gaming laptop", "x" * 40]

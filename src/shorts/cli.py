@@ -114,6 +114,8 @@ def _checks(settings: Settings) -> list[tuple[str, bool, str]]:
         ("critical", *probe_gemini(settings)),
         ("critical", importlib.util.find_spec("kokoro") is not None, "Kokoro voice installed"),
         ("warning", settings.fallback_api_key is not None, "fallback AI key (FALLBACK_LLM_API_KEY)"),
+        ("warning", settings.pexels_api_key is not None,
+         "stock video key (PEXELS_API_KEY): without it, news with no game footage is skipped"),
         ("warning", licensed > 0, f"{licensed} licensed music track(s) in {settings.music_dir}"),
         ("warning", *_free_space(settings)),
     ]

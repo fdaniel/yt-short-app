@@ -7,8 +7,11 @@ import pytest
 import respx
 from PIL import Image
 
+from datetime import UTC, datetime
+
 from shorts.media.ffmpeg import probe_video
-from shorts.models import AssetKind, VideoFormat, VideoStatus
+from shorts.media.shots import Shot
+from shorts.models import Asset, AssetKind, RightsBasis, VideoFormat, VideoStatus
 from shorts.pipeline import PipelineDeps, PipelineError, make_video
 from shorts.script.schema import CardFact, Claim, ClaimVerdict, FactCheckResult, ScriptDraft
 from shorts.storage.repositories import AssetRepository, VideoRepository
@@ -92,13 +95,65 @@ def test_e2e_narration_too_long_fails_before_render(settings, conn):
 
 
 @respx.mock
-def test_e2e_steam_failure_falls_back_to_cards(settings, conn):
+def test_e2e_no_footage_at_all_is_refused(settings, conn):
+    # a Short of text cards only does badly on YouTube: better no video than that one
     respx.get(NEWS).respond(200, text=(FIXTURES / "article_nvidia.html").read_text())
     respx.get(url__startswith="https://store.steampowered.com/api/appdetails").respond(503)
     deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
-    r = make_video(NEWS, 999, VideoFormat.NEWS_FLASH, settings, deps, conn)
-    kinds = {a.kind for a in AssetRepository(conn).list_for_video(r.video_id)}
-    assert kinds == {AssetKind.CARD}
+    with pytest.raises(PipelineError, match="no footage.*PEXELS_API_KEY"):
+        make_video(NEWS, 999, VideoFormat.NEWS_FLASH, settings, deps, conn)
+    assert VideoRepository(conn).get(1).status == VideoStatus.FAILED
+    assert not (settings.data_dir / "exports").exists()
+
+
+@pytest.fixture
+def pexels_settings(settings):
+    return settings.model_copy(update={"pexels_api_key": "pk"})
+
+
+def mock_pexels(synthetic_video):
+    payload = json.loads((FIXTURES / "pexels_search.json").read_text())
+    route = respx.get(url__startswith="https://api.pexels.com/videos/search").respond(200, json=payload)
+    respx.get(url__startswith="https://videos.pexels.com/").respond(200, content=synthetic_video.read_bytes())
+    return route
+
+
+@respx.mock
+def test_e2e_hardware_story_gets_stock_footage(pexels_settings, conn, synthetic_video):
+    respx.get(NEWS).respond(200, text=(FIXTURES / "article_nvidia.html").read_text())
+    search = mock_pexels(synthetic_video)
+    draft = GOOD.model_copy(update={"footage_queries": ["gaming laptop", "graphics card"]})
+    deps = PipelineDeps(httpx.Client(), ScriptedLLM([draft, ALL_OK]), FakeTTS(rate=0.07))
+    r = make_video(NEWS, None, VideoFormat.NEWS_FLASH, pexels_settings, deps, conn)
+    assert search.calls[0].request.url.params["query"] == "gaming laptop"
+    kinds = [a.kind for a in AssetRepository(conn).list_for_video(r.video_id)]
+    assert kinds.count(AssetKind.STOCK_VIDEO) == 2
+    meta = json.loads(r.metadata_path.read_text())
+    assert "Stock footage: Ana Silva via Pexels (https://www.pexels.com/video/laptop-101/)" in meta["description"]
+    assert probe_video(r.video_path).height == 1920
+
+
+@respx.mock
+def test_e2e_game_with_trailer_does_not_search_stock(pexels_settings, conn, synthetic_video, monkeypatch):
+    mock_sources()
+    search = mock_pexels(synthetic_video)
+    trailer = AssetKind.TRAILER
+    monkeypatch.setattr("shorts.pipeline.collect_steam_assets", lambda *a, **k: [
+        Asset(None, trailer, synthetic_video, "https://steam/x.mp4", "steam", "Pub", RightsBasis.STORE_PROMO,
+              "steam-store-promo", True, datetime.now(UTC))])
+    monkeypatch.setattr("shorts.pipeline.detect_shots", lambda path, asset_id, **k: [Shot(path, asset_id, 0.5, 5.5, 1.0)])
+    deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
+    make_video(NEWS, 2, VideoFormat.NEWS_FLASH, pexels_settings, deps, conn)
+    assert search.call_count == 0
+
+
+@respx.mock
+def test_e2e_stock_search_falls_back_to_generic_terms(pexels_settings, conn, synthetic_video):
+    respx.get(NEWS).respond(200, text=(FIXTURES / "article_nvidia.html").read_text())
+    search = mock_pexels(synthetic_video)
+    deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
+    make_video(NEWS, None, VideoFormat.NEWS_FLASH, pexels_settings, deps, conn)
+    assert search.calls[0].request.url.params["query"] == "computer hardware"
 
 
 @respx.mock
@@ -107,7 +162,7 @@ def test_given_article_is_not_fetched(settings, conn):
     route = respx.get(NEWS)
     given = extract_article(NEWS, (FIXTURES / "article_nvidia.html").read_text())
     deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
-    make_video(NEWS, None, VideoFormat.NEWS_FLASH, settings, deps, conn, article=given)
+    make_video(NEWS, 2, VideoFormat.NEWS_FLASH, settings, deps, conn, article=given)
     assert route.call_count == 0
 
 
@@ -117,7 +172,7 @@ def test_failure_removes_work_dir(settings, conn, monkeypatch):
     monkeypatch.setattr("shorts.pipeline.render_video", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("render crashed")))
     deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
     with pytest.raises(PipelineError, match="render crashed"):
-        make_video(NEWS, None, VideoFormat.NEWS_FLASH, settings, deps, conn)
+        make_video(NEWS, 2, VideoFormat.NEWS_FLASH, settings, deps, conn)
     assert not any((settings.data_dir / "work").glob("*"))
 
 
@@ -132,19 +187,30 @@ def test_interrupt_marks_failed(settings, conn):
 
 
 @respx.mock
-def test_broken_screenshot_is_skipped(settings, conn):
+def test_broken_screenshot_is_skipped(pexels_settings, conn, synthetic_video):
     mock_sources()
+    mock_pexels(synthetic_video)
     respx.get(url__regex=r".*\.jpg.*").respond(200, content=b"not an image")
     deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
-    r = make_video(NEWS, 2, VideoFormat.NEWS_FLASH, settings, deps, conn)
+    r = make_video(NEWS, 2, VideoFormat.NEWS_FLASH, pexels_settings, deps, conn)
     assert r.video_path.exists()
 
 
 @respx.mock
-def test_unexpected_steam_error_falls_back_to_cards(settings, conn, monkeypatch):
+def test_only_broken_screenshots_is_no_footage(settings, conn):
     mock_sources()
+    respx.get(url__regex=r".*\.jpg.*").respond(200, content=b"not an image")
+    deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
+    with pytest.raises(PipelineError, match="no footage"):
+        make_video(NEWS, 2, VideoFormat.NEWS_FLASH, settings, deps, conn)
+
+
+@respx.mock
+def test_unexpected_steam_error_falls_back_to_stock(pexels_settings, conn, monkeypatch, synthetic_video):
+    mock_sources()
+    mock_pexels(synthetic_video)
     monkeypatch.setattr("shorts.pipeline.collect_steam_assets", lambda *a, **k: (_ for _ in ()).throw(OSError("disk")))
     deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
-    r = make_video(NEWS, 2, VideoFormat.NEWS_FLASH, settings, deps, conn)
+    r = make_video(NEWS, 2, VideoFormat.NEWS_FLASH, pexels_settings, deps, conn)
     kinds = {a.kind for a in AssetRepository(conn).list_for_video(r.video_id)}
-    assert kinds == {AssetKind.CARD}
+    assert kinds == {AssetKind.CARD, AssetKind.STOCK_VIDEO}

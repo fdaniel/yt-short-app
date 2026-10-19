@@ -16,6 +16,7 @@ class RightsBasis(StrEnum):
 
 class AssetKind(StrEnum):
     TRAILER = "trailer"
+    STOCK_VIDEO = "stock_video"
     SCREENSHOT = "screenshot"
     CARD = "card"
     MUSIC = "music"

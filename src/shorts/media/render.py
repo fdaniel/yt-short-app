@@ -11,6 +11,8 @@ from shorts.voice.narration import Narration
 
 _SEGMENT_ENCODE = ["-r", "30", "-pix_fmt", "yuv420p", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-an"]
 _COVER = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920"
+_FPS = 30
+_STILL_ZOOM = 0.08  # a still zooms in this much over its slot, so nothing on screen is frozen
 
 
 class RenderError(Exception):
@@ -24,16 +26,30 @@ def _shot_filter(plan: CropPlan) -> str:
     return f"{bars}{_COVER},setsar=1,fps=30"
 
 
+def _still_filter(duration: float) -> str:
+    # zoompan on a 2x picture: zooming at 1080x1920 visibly jitters
+    frames = max(1, round(duration * _FPS))
+    return (
+        f"{_COVER},scale=2160:3840,zoompan=z='1+{_STILL_ZOOM}*on/{frames}':x='iw/2-iw/zoom/2':"
+        f"y='ih/2-ih/zoom/2':d=1:s=1080x1920:fps={_FPS},setsar=1"
+    )
+
+
 def _render_segment(item: TimelineItem, out: Path, timeout_s: int) -> None:
+    length = f"{item.duration:.3f}"
     if item.kind == "shot":
         shot = item.shot
         plan = choose_crop(shot.source, shot.start, shot.end)
-        inputs = ["-ss", f"{shot.start:.3f}", "-t", f"{item.duration:.3f}", "-i", str(shot.source)]
-        video_filter = _shot_filter(plan)
+        inputs = ["-ss", f"{shot.start:.3f}", "-t", length, "-i", str(shot.source)]
+        background = _shot_filter(plan)
     else:
-        inputs = ["-loop", "1", "-t", f"{item.duration:.3f}", "-i", str(item.image)]
-        video_filter = f"{_COVER},setsar=1,fps=30"
-    run_ffmpeg([*inputs, "-vf", video_filter, *_SEGMENT_ENCODE, str(out)], timeout_s=timeout_s)
+        inputs = ["-loop", "1", "-framerate", str(_FPS), "-t", length, "-i", str(item.image)]
+        background = _still_filter(item.duration)
+    graph = f"[0:v]{background}[v]"
+    if item.overlay is not None:
+        inputs += ["-loop", "1", "-framerate", str(_FPS), "-t", length, "-i", str(item.overlay)]
+        graph = f"[0:v]{background}[bg];[1:v]format=rgba[card];[bg][card]overlay=0:0:shortest=1[v]"
+    run_ffmpeg([*inputs, "-filter_complex", graph, "-map", "[v]", *_SEGMENT_ENCODE, str(out)], timeout_s=timeout_s)
 
 
 def _concat(items: list[TimelineItem], segments: Path, timeout_s: int) -> Path:

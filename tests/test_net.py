@@ -87,3 +87,10 @@ def test_redirect_to_private_address_is_refused(settings):
     with build_http_client(settings) as client, pytest.raises(UnsafeURLError):
         fetch_text(client, "https://example.com/a", max_bytes=1000)
     assert admin.call_count == 0
+
+
+@respx.mock
+def test_fetch_text_sends_extra_headers():
+    route = respx.get("https://api.example.com/x").respond(200, text="ok")
+    assert fetch_text(httpx.Client(), "https://api.example.com/x", max_bytes=100, headers={"Authorization": "k"}) == "ok"
+    assert route.calls.last.request.headers["Authorization"] == "k"

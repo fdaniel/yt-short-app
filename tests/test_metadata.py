@@ -73,3 +73,16 @@ def test_hashtags_survive_garbled_model_output():
 def test_hashtags_fall_back_when_all_unusable():
     m = build_metadata(draft(hashtags=["not a tag at all", "{}", "also bad text"]), article(), [])
     assert m.hashtags == ("#TechNews", "#Shorts")
+
+
+def test_stock_footage_credits_each_filmmaker_and_pexels(make_asset):
+    clips = [
+        make_asset(kind=AssetKind.STOCK_VIDEO, rightsholder="Ana <Silva>", source_platform="pexels",
+                   source_url="https://www.pexels.com/video/laptop-101/", rights_basis=RightsBasis.LICENSED),
+        make_asset(kind=AssetKind.STOCK_VIDEO, rightsholder="Ben Ito", source_platform="pexels",
+                   source_url="https://www.pexels.com/video/desk-103/", rights_basis=RightsBasis.LICENSED),
+    ]
+    m = build_metadata(draft(), article(), clips)
+    assert "Stock footage: Ana Silva via Pexels (https://www.pexels.com/video/laptop-101/)" in m.description
+    assert "Stock footage: Ben Ito via Pexels (https://www.pexels.com/video/desk-103/)" in m.description
+    assert "Footage: Ana" not in m.description

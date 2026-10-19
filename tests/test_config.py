@@ -59,3 +59,10 @@ def test_default_gemini_model_follows_current_flash(tmp_path):
     cfg = tmp_path / "config.yaml"
     cfg.write_text("")
     assert load_settings(cfg, {"GEMINI_API_KEY": "k"}).llm.gemini_model == "gemini-flash-latest"
+
+
+def test_pexels_key_is_optional_and_read_from_env(tmp_path):
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text("")
+    assert load_settings(cfg, {"GEMINI_API_KEY": "k"}).pexels_api_key is None
+    assert load_settings(cfg, {"GEMINI_API_KEY": "k", "PEXELS_API_KEY": " p "}).pexels_api_key == "p"

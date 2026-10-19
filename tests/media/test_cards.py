@@ -41,3 +41,26 @@ def test_long_fact_value_is_not_cut_to_one_line(tmp_path, font_file):
     body = image.crop((0, 450, image.width, 1080)).point(lambda v: 255 if v > 230 else 0)
     top, bottom = body.getbbox()[1], body.getbbox()[3]
     assert bottom - top > 120  # more than one line of value text
+
+
+def _assert_see_through_panel(path):
+    image = Image.open(path)
+    assert image.mode == "RGBA" and image.size == CANVAS
+    alpha = image.getchannel("A")
+    assert alpha.getpixel((5, 5)) == 0 and alpha.getpixel((540, 1800)) == 0  # footage shows around the panel
+    assert 150 <= alpha.getpixel((60, 300)) < 255  # a dark, slightly see-through panel behind the text
+    assert alpha.getextrema()[1] == 255  # the text itself is solid
+
+
+def test_hook_overlay_is_a_panel_over_the_footage(tmp_path, font_file):
+    _assert_see_through_panel(render_hook_card("DLSS 5 is here", tmp_path / "h.png", font_file, overlay=True))
+
+
+def test_fact_overlay_is_a_panel_over_the_footage(tmp_path, font_file):
+    facts = [CardFact(label="Price", value="$1,999")]
+    _assert_see_through_panel(render_fact_card("RTX 5090", facts, tmp_path / "f.png", font_file, overlay=True))
+
+
+def test_full_card_stays_opaque(tmp_path, font_file):
+    image = Image.open(render_hook_card("DLSS 5 is here", tmp_path / "h.png", font_file))
+    assert image.mode == "RGB" and image.getpixel((5, 5)) == (11, 15, 20)

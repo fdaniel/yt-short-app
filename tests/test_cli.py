@@ -45,6 +45,7 @@ def test_check_setup_reports_each_check(tmp_path, capsys, monkeypatch):
     out = capsys.readouterr().out
     assert code == 1
     assert "ffmpeg" in out and "font" in out.lower() and "location is not supported" in out
+    assert "! stock video key (PEXELS_API_KEY)" in out
 
 
 # --- automatic mode -------------------------------------------------------------------------

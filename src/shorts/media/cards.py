@@ -1,4 +1,8 @@
-"""Generated 1080x1920 visuals: hook card, fact card, and screenshot stills."""
+"""Generated 1080x1920 visuals: hook card, fact card, and screenshot stills.
+
+Cards come in two versions: full (opaque background, used when there is no footage)
+and overlay (a dark see-through panel behind the text, drawn over footage).
+"""
 
 from pathlib import Path
 
@@ -12,6 +16,9 @@ BACKGROUND = (11, 15, 20)
 ACCENT = (61, 220, 151)
 TEXT = (245, 247, 250)
 MUTED = (150, 160, 175)
+PANEL = (*BACKGROUND, 200)
+PANEL_PADDING = 40
+PANEL_RADIUS = 28
 
 
 def _wrap(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, width: int) -> list[str]:
@@ -37,11 +44,26 @@ def _fit(draw, text, font_file: Path, width: int, height: int, size: int, minimu
 
 
 def _blank() -> tuple[Image.Image, ImageDraw.ImageDraw]:
-    image = Image.new("RGB", CANVAS, BACKGROUND)
+    """A transparent layer to draw the card's text on."""
+    image = Image.new("RGBA", CANVAS, (0, 0, 0, 0))
     return image, ImageDraw.Draw(image)
 
 
-def render_hook_card(text: str, out: Path, font_file: Path) -> Path:
+def _save(text_layer: Image.Image, out: Path, overlay: bool) -> Path:
+    if not overlay:
+        Image.alpha_composite(Image.new("RGBA", CANVAS, (*BACKGROUND, 255)), text_layer).convert("RGB").save(out)
+        return out
+    left, top, right, bottom = text_layer.getbbox() or SAFE_BOX
+    panel = Image.new("RGBA", CANVAS, (0, 0, 0, 0))
+    ImageDraw.Draw(panel).rounded_rectangle(
+        (left - PANEL_PADDING, top - PANEL_PADDING, right + PANEL_PADDING, bottom + PANEL_PADDING),
+        radius=PANEL_RADIUS, fill=PANEL,
+    )
+    Image.alpha_composite(panel, text_layer).save(out)
+    return out
+
+
+def render_hook_card(text: str, out: Path, font_file: Path, *, overlay: bool = False) -> Path:
     image, draw = _blank()
     left, top, right, bottom = SAFE_BOX
     draw.rectangle((left, top, left + 120, top + 14), fill=ACCENT)
@@ -50,11 +72,12 @@ def render_hook_card(text: str, out: Path, font_file: Path) -> Path:
     for line in lines:
         draw.text((left, y), line, font=font, fill=TEXT)
         y += line_h
-    image.save(out)
-    return out
+    return _save(image, out, overlay)
 
 
-def render_fact_card(title: str, facts: list[CardFact], out: Path, font_file: Path) -> Path:
+def render_fact_card(
+    title: str, facts: list[CardFact], out: Path, font_file: Path, *, overlay: bool = False
+) -> Path:
     if not facts:
         raise ValueError("a fact card needs at least one fact")
     image, draw = _blank()
@@ -72,8 +95,7 @@ def render_fact_card(title: str, facts: list[CardFact], out: Path, font_file: Pa
         for i, line in enumerate(value_lines):
             draw.text((left, y + 40 + row_h // 3 + i * value_h), line, font=value_font, fill=TEXT)
         y += row_h
-    image.save(out)
-    return out
+    return _save(image, out, overlay)
 
 
 def render_still(image: Path, out: Path) -> Path:

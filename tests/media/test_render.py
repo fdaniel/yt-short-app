@@ -64,4 +64,34 @@ def test_letterboxed_trailer_fills_the_frame(scene, settings, tmp_path):
     out = render_video(items, narration, ass, None, work / "video.mp4", settings)
     frame = frame_at(out, 5, tmp_path / "f.png")
     for band in ((0, 100, 1080, 230), (0, 1700, 1080, 1900)):  # where the bars used to be
-        assert sum(frame.crop(band).getdata()) / ((band[2] - band[0]) * (band[3] - band[1])) > 60
+        assert mean(frame, band) > 60
+
+
+def mean(frame, box):
+    import numpy as np
+
+    return float(np.asarray(frame.crop(box)).mean())
+
+
+def test_text_panel_is_drawn_over_the_footage(scene, settings, tmp_path, font_file):
+    work, narration, ass, _ = scene
+    white = lavfi_video(tmp_path, "color=c=white:size=1920x1080:duration=12", name="white.mp4")
+    overlay = render_hook_card("DLSS 5 is here", work / "hook_overlay.png", font_file, overlay=True)
+    items = [TimelineItem("shot", 10.0, Shot(white, 1, 0.5, 10.5, 1.0), None, overlay)]
+    frame = frame_at(render_video(items, narration, ass, None, work / "video.mp4", settings), 5, tmp_path / "f.png")
+    assert mean(frame, (50, 240, 70, 260)) < 100  # the dark panel
+    assert mean(frame, (0, 1700, 1080, 1900)) > 200  # footage around it
+
+
+def test_screenshots_move(scene, settings, tmp_path):
+    from PIL import Image, ImageDraw
+
+    work, narration, ass, _ = scene
+    still = tmp_path / "still.png"
+    image = Image.new("RGB", (1080, 1920), "gray")
+    ImageDraw.Draw(image).rectangle((300, 600, 780, 1300), fill="white")
+    image.save(still)
+    out = render_video([TimelineItem("image", 10.0, None, still)], narration, ass, None, work / "v.mp4", settings)
+    early, late = frame_at(out, 0.5, tmp_path / "a.png"), frame_at(out, 9.0, tmp_path / "b.png")
+    # a slow zoom: the white box grows, so the row just above it turns white
+    assert mean(late, (400, 560, 680, 590)) > mean(early, (400, 560, 680, 590)) + 40

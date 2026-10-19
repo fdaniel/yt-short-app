@@ -50,9 +50,11 @@ def build_http_client(settings: Settings) -> httpx.Client:
     )
 
 
-def _fetch(client: httpx.Client, url: str, max_bytes: int) -> tuple[bytes, str | None]:
+def _fetch(
+    client: httpx.Client, url: str, max_bytes: int, headers: dict[str, str] | None = None
+) -> tuple[bytes, str | None]:
     validate_public_url(url)
-    with client.stream("GET", url) as response:
+    with client.stream("GET", url, headers=headers) as response:
         response.raise_for_status()
         body = bytearray()
         for chunk in response.iter_bytes(_CHUNK):
@@ -66,8 +68,8 @@ def fetch_bytes(client: httpx.Client, url: str, *, max_bytes: int) -> bytes:
     return _fetch(client, url, max_bytes)[0]
 
 
-def fetch_text(client: httpx.Client, url: str, *, max_bytes: int) -> str:
-    body, encoding = _fetch(client, url, max_bytes)
+def fetch_text(client: httpx.Client, url: str, *, max_bytes: int, headers: dict[str, str] | None = None) -> str:
+    body, encoding = _fetch(client, url, max_bytes, headers)
     return body.decode(encoding or "utf-8", errors="replace")
 
 

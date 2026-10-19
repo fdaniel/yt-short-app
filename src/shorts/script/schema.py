@@ -1,6 +1,9 @@
 """Structured LLM outputs for scripts and fact checks."""
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+MAX_FOOTAGE_QUERIES = 4
+MAX_QUERY_CHARS = 40
 
 
 class _Frozen(BaseModel):
@@ -26,6 +29,14 @@ class ScriptDraft(_Frozen):
     hashtags: list[str] = Field(min_length=3, max_length=5)
     claims: list[Claim] = Field(min_length=1)
     card_facts: list[CardFact] = Field(default_factory=list, max_length=6)
+    footage_queries: list[str] = Field(default_factory=list)
+
+    @field_validator("footage_queries")
+    @classmethod
+    def _tidy_queries(cls, queries: list[str]) -> list[str]:
+        """Search terms only steer stock footage, so a sloppy one is trimmed rather than failing the script."""
+        tidy = [" ".join(q.split())[:MAX_QUERY_CHARS].strip() for q in queries]
+        return [q for q in tidy if q][:MAX_FOOTAGE_QUERIES]
 
 
 class ClaimVerdict(_Frozen):

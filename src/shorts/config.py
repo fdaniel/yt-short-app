@@ -101,6 +101,7 @@ class Settings(_Frozen):
     font_file: Path = Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
     gemini_api_key: str
     fallback_api_key: str | None = None
+    pexels_api_key: str | None = None  # optional: stock footage for stories with no game trailer
     llm: LLMSettings = LLMSettings()
     voice: VoiceSettings = VoiceSettings()
     video: VideoSettings = VideoSettings()
@@ -126,8 +127,9 @@ def load_settings(config_path: Path, env: Mapping[str, str]) -> Settings:
     if not gemini_key:
         raise ConfigError("GEMINI_API_KEY is not set (put it in .env)")
     fallback_key = (env.get("FALLBACK_LLM_API_KEY") or "").strip() or None
+    pexels_key = (env.get("PEXELS_API_KEY") or "").strip() or None
 
-    secrets = {"gemini_api_key": gemini_key, "fallback_api_key": fallback_key}
+    secrets = {"gemini_api_key": gemini_key, "fallback_api_key": fallback_key, "pexels_api_key": pexels_key}
     try:
         settings = Settings(**{**raw, **secrets})
     except ValidationError as exc:

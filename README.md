@@ -5,7 +5,7 @@ Makes short vertical videos (YouTube Shorts) about tech and gaming news, automat
 1. reads an **official** news page (NVIDIA, AMD, publishers, …),
 2. writes a 30–55 second script with a free AI, keeping **only facts found in that page** (checked twice, at most one rewrite),
 3. reads it with a free, local AI voice (Kokoro),
-4. builds a 1080×1920 video from **short Steam trailer excerpts** (≤ 4 s each, under half the video, trailer sound removed), store screenshots and its own spec cards,
+4. builds a 1080×1920 video from **short Steam trailer excerpts** (≤ 4 s each, under half the video, trailer sound removed), store screenshots, free **Pexels stock video** (for tech news with no game footage) and its own spec cards shown over the footage,
 5. adds captions, an on-screen credit, and licensed background music,
 6. saves `video.mp4` + `metadata.json` (title, description with source and footage credits, hashtags, licence log) for you to review.
 
@@ -41,6 +41,11 @@ cp config.example.yaml config.yaml
 
 - `GEMINI_API_KEY`: https://aistudio.google.com → **Get API key**.
 - `FALLBACK_LLM_API_KEY` (optional, used when Gemini's free quota runs out): a free key from https://console.groq.com.
+- `PEXELS_API_KEY` (optional, strongly recommended): free stock video for tech news, which has no game trailer.
+  Sign up at https://www.pexels.com/join/, then open https://www.pexels.com/api/ → **Get Started** and copy the key.
+  The Pexels License allows free commercial use; each clip's filmmaker is credited in the video description.
+  The clips are generic (a laptop, a chip), never the announced product itself.
+  Without this key, a story with no game trailer or screenshots is **skipped**: a Short made only of text does badly.
 
 ### Music (optional)
 
@@ -58,7 +63,7 @@ python -m shorts check-setup
 ## Make a video
 
 ```bash
-# hardware news: spec cards only
+# hardware news: Pexels stock video + spec cards (needs PEXELS_API_KEY)
 python -m shorts make-video --news-url "https://nvidianews.nvidia.com/news/..."
 
 # game news: add the game's Steam app ID (the number in its store URL)
