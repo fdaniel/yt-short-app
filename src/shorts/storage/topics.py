@@ -44,6 +44,12 @@ class TopicRepository:
             "SELECT status, score, title, source, explanation, created_at FROM topics ORDER BY id DESC LIMIT ?", (n,)
         ).fetchall()
 
+    def for_video(self, video_id: int) -> sqlite3.Row | None:
+        """The story a video was made from (source, score, explanation), if it came from automatic mode."""
+        return self._conn.execute(
+            "SELECT source, score, explanation FROM topics WHERE video_id = ? ORDER BY id DESC LIMIT 1", (video_id,)
+        ).fetchone()
+
     def forget(self, url: str) -> None:
         """Drop a topic so a later run can consider it again (e.g. the AI quota ran out mid-video)."""
         with self._conn:
