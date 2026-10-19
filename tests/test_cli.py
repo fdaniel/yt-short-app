@@ -139,3 +139,74 @@ def test_run_once_setup_problem_is_logged(tmp_path, monkeypatch, capsys):
     log = tmp_path / "fallback.log"
     assert cli.main(["run-once", "--config", str(write_config(tmp_path)), "--log-file", str(log)]) == 1
     assert "GEMINI_API_KEY" in log.read_text()
+
+
+# --- dashboard and YouTube ------------------------------------------------------------------
+
+from shorts import publish_cli  # noqa: E402
+
+
+class _FakeServer:
+    instances: list = []
+
+    def __init__(self, dashboard, host="127.0.0.1", port=8000):
+        self.dashboard, self.port, self.served = dashboard, port, False
+        _FakeServer.instances.append(self)
+
+    def serve_forever(self):
+        self.served = True
+        raise KeyboardInterrupt
+
+    def server_close(self):
+        pass
+
+
+def test_dashboard_command_serves_until_ctrl_c(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    opened = []
+    monkeypatch.setattr(publish_cli, "DashboardServer", _FakeServer)
+    monkeypatch.setattr(publish_cli, "open_on_windows", opened.append)
+    code = cli.main(["dashboard", "--port", "8123", "--config", str(write_config(tmp_path))])
+    assert code == 0
+    server = _FakeServer.instances[-1]
+    assert server.port == 8123 and server.served
+    assert opened == ["http://localhost:8123/"]
+    assert "http://localhost:8123/" in capsys.readouterr().out
+
+
+def test_dashboard_port_busy_is_friendly(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+
+    def busy(*args, **kwargs):
+        raise OSError(98, "Address already in use")
+
+    monkeypatch.setattr(publish_cli, "DashboardServer", busy)
+    assert cli.main(["dashboard", "--no-open", "--config", str(write_config(tmp_path))]) == 1
+    assert "--port" in capsys.readouterr().err
+
+
+def test_youtube_connect_without_client_file_explains(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    assert cli.main(["youtube-connect", "--config", str(write_config(tmp_path))]) == 1
+    assert "client_secret.json" in capsys.readouterr().err
+
+
+def test_youtube_connect_reports_channel(tmp_path, capsys, monkeypatch):
+    from shorts.publish.youtube import Channel
+
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setattr(publish_cli.YouTubeAccount, "connect", lambda self: Channel("UC1", "Tech Bits"))
+    assert cli.main(["youtube-connect", "--config", str(write_config(tmp_path))]) == 0
+    assert "Tech Bits" in capsys.readouterr().out
+
+
+def test_open_on_windows_converts_linux_paths(monkeypatch, tmp_path):
+    calls = []
+
+    class Done:
+        stdout = "\\\\wsl.localhost\\Ubuntu\\tmp\\x\n"
+
+    monkeypatch.setattr(publish_cli.subprocess, "run", lambda args, **kw: calls.append(args) or Done())
+    monkeypatch.setattr(publish_cli.subprocess, "Popen", lambda args, **kw: calls.append(args))
+    publish_cli.open_on_windows(tmp_path)
+    assert calls == [["wslpath", "-w", str(tmp_path)], ["explorer.exe", "\\\\wsl.localhost\\Ubuntu\\tmp\\x"]]

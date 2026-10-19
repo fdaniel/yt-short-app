@@ -110,6 +110,47 @@ python -m shorts schedule-help
 prints one `schtasks` command: paste it into **PowerShell** (Windows, not Ubuntu). It runs while you are logged in
 to Windows. The same output shows the command to switch it off.
 
+## Dashboard
+
+```bash
+python -m shorts dashboard
+```
+
+opens `http://localhost:8000` in your Windows browser (leave the Ubuntu window open; Ctrl+C stops it). It shows
+every video with a player, the story it came from and why it was picked, and copy buttons for the title,
+description and hashtags. Tabs: To review, Published, Being made, Discarded, Failed. At the bottom: the last
+automatic runs.
+
+For a video to review:
+
+- **Upload to <your channel>**: one click, once YouTube is connected (below).
+- **Upload by hand**: *Open the video folder* (or *Download video*), *Open YouTube upload*, drag the video in,
+  paste the texts, then **Mark as published** (paste the YouTube link if you like).
+- **Discard**: deletes the video file (keeps its texts) to free disk space.
+
+The page only answers on this computer, and its buttons only work from the page itself.
+
+### YouTube upload (one-time setup)
+
+Free, but Google needs a few clicks. Create the channel first (youtube.com → your avatar → Create a channel).
+
+1. Go to <https://console.cloud.google.com>, create a project (e.g. "tech-shorts").
+2. **APIs & Services → Library**: enable **YouTube Data API v3**.
+3. **APIs & Services → OAuth consent screen**: user type **External**, fill in the app name and your email, add
+   yourself as a test user, then set publishing status to **In production**. (In "Testing", Google cuts the
+   connection after 7 days. Sign-in will show "Google hasn't verified this app": that is your own app, click
+   Advanced → Continue.)
+4. **Credentials → Create credentials → OAuth client ID → Desktop app**. Download the JSON and save it as
+   `~/tech-shorts-data/youtube/client_secret.json` (in Windows Explorer:
+   `\\wsl$\Ubuntu\home\<you>\tech-shorts-data\youtube\`).
+5. Run `python -m shorts youtube-connect`, sign in, **pick the channel**, allow access.
+
+**Until Google audits your app, YouTube locks API uploads as private**, so use *Upload by hand* until then. Ask for the free audit with the YouTube API Services form:
+<https://support.google.com/youtube/contact/yt_api_form>. Once approved, one-click uploads go public.
+
+The connection is stored in `~/tech-shorts-data/youtube/token.json` (readable only by you). Delete that folder's
+`token.json` to disconnect.
+
 ## Settings
 
 `config.yaml` controls voice, narration length (`min_words`/`max_words`, tuned to ~2 words per second),

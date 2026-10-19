@@ -186,6 +186,8 @@ def render(view: DashboardView, token: str, notice: str | None = None) -> str:
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        '<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E'
+        '%3Crect width=%2216%22 height=%2216%22 rx=%223%22 fill=%22%232f6fed%22/%3E%3Cpath d=%22M6 4l6 4-6 4z%22 fill=%22white%22/%3E%3C/svg%3E">'
         f"<title>Tech Shorts</title><style>{_CSS}</style></head><body>"
         f"{_header(view)}<main>{banner}<nav>{tabs}</nav>{cards}</main>"
         f'<footer><h2>Automatic runs</h2><pre>{runs}</pre></footer><script>{_JS}</script></body></html>'

@@ -1,4 +1,4 @@
-"""Command line: `python -m shorts make-video|check-setup|run-once|schedule-help|topics`."""
+"""Command line: `python -m shorts make-video|check-setup|run-once|schedule-help|topics|dashboard|youtube-connect`."""
 
 import argparse
 import importlib.util
@@ -12,7 +12,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from shorts import auto_cli
+from shorts import auto_cli, publish_cli
 from shorts.config import ConfigError, Settings, load_settings
 from shorts.llm.base import InvalidOutput, ProviderUnavailable
 from shorts.llm.chain import build_llm
@@ -49,6 +49,12 @@ def _parser() -> argparse.ArgumentParser:
     topics = sub.add_parser("topics", help="recent stories and why they were picked or skipped")
     topics.add_argument("--last", type=int, default=10)
     topics.add_argument("--config", default="config.yaml", type=Path)
+    dash = sub.add_parser("dashboard", help="open the local page to watch, publish and discard videos")
+    dash.add_argument("--port", type=int, default=8000)
+    dash.add_argument("--no-open", action="store_true", help="do not open the browser")
+    dash.add_argument("--config", default="config.yaml", type=Path)
+    connect_yt = sub.add_parser("youtube-connect", help="allow uploads to your YouTube channel (once)")
+    connect_yt.add_argument("--config", default="config.yaml", type=Path)
     return parser
 
 
@@ -141,4 +147,8 @@ def main(argv: list[str] | None = None) -> int:
         return auto_cli.schedule_help(args.config)
     if args.command == "topics":
         return auto_cli.topics_command(settings, args.last)
+    if args.command == "dashboard":
+        return publish_cli.dashboard_command(settings, args.port, not args.no_open)
+    if args.command == "youtube-connect":
+        return publish_cli.youtube_connect_command(settings)
     return _make_video(args, settings)
