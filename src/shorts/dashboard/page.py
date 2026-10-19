@@ -1,5 +1,7 @@
 """The dashboard's single HTML page. Every value from feeds, the AI or the database is escaped."""
 
+import base64
+import hashlib
 from datetime import datetime
 from html import escape
 
@@ -7,6 +9,7 @@ from shorts.dashboard.app import TABS, DashboardView, VideoCard
 from shorts.models import VideoStatus
 
 YOUTUBE_UPLOAD_URL = "https://www.youtube.com/upload"
+YOUTUBE_STUDIO_URL = "https://studio.youtube.com"
 TAB_LABELS = {
     "review": "To review",
     "published": "Published",
@@ -73,6 +76,8 @@ document.addEventListener('submit', (e) => {
 });
 """
 
+SCRIPT_HASH = "sha256-" + base64.b64encode(hashlib.sha256(_JS.encode()).digest()).decode()  # pinned in the CSP
+
 
 def _when(iso: str | None) -> str:
     if not iso:
@@ -112,7 +117,7 @@ def _review_actions(card: VideoCard, view: DashboardView, token: str) -> str:
     if view.channel:
         auto = _form(vid, "upload", token, tab,
                      f'<button class="primary">Upload to {escape(view.channel.title)}</button>',
-                     f"Upload video #{vid} to {view.channel.title} now?")
+                     f"Upload video #{vid} to {view.channel.title} as {view.privacy} now?")
     else:
         auto = ('<span class="muted">One-click upload: connect your channel first with '
                 '<code>python -m shorts youtube-connect</code>.</span>')
@@ -122,16 +127,27 @@ def _review_actions(card: VideoCard, view: DashboardView, token: str) -> str:
         f'<a class="button" href="/videos/{vid}.mp4?download=1">Download video</a></span></li>'
         f'<li><a class="button" href="{YOUTUBE_UPLOAD_URL}" target="_blank" rel="noopener noreferrer">'
         "Open YouTube upload ↗</a> drag the video in, then paste the title, description and hashtags.</li>"
-        "<li>"
-        + _form(vid, "mark-uploaded", token, tab,
-                '<label for="link-{0}">YouTube link (optional)</label>'
-                '<span class="row"><input type="text" id="link-{0}" name="link" placeholder="https://youtube.com/shorts/…">'
-                "<button>Mark as published</button></span>".format(vid))
-        + "</li></ol></div>"
+        f"<li>{_mark_form(vid, token, tab)}</li></ol></div>"
     )
     discard = _form(vid, "discard", token, tab, '<button class="danger">Discard</button>',
                     f"Discard video #{vid}? Its video file will be deleted.")
     return f'<div class="row">{auto}{discard}</div>{by_hand}'
+
+
+def _mark_form(vid: int, token: str, tab: str) -> str:
+    return _form(vid, "mark-uploaded", token, tab,
+                 f'<label for="link-{vid}">YouTube link (optional)</label>'
+                 f'<span class="row"><input type="text" id="link-{vid}" name="link" placeholder="https://youtube.com/shorts/…">'
+                 "<button>Mark as published</button></span>")
+
+
+def _uploading_actions(card: VideoCard, view: DashboardView, token: str) -> str:
+    vid = card.record.id
+    return (f'<p class="bad">An upload started {_when(card.record.updated_at)} but was not confirmed. Check '
+            f'<a href="{YOUTUBE_STUDIO_URL}" target="_blank" rel="noopener noreferrer">YouTube Studio ↗</a>: if the'
+            " video is there, paste its link and press Mark as published; if not, put it back to review.</p>"
+            + _mark_form(vid, token, view.tab)
+            + f'<div class="row">{_form(vid, "back-to-review", token, view.tab, "<button>Back to review</button>")}</div>')
 
 
 def _status_line(card: VideoCard) -> str:
@@ -144,7 +160,7 @@ def _status_line(card: VideoCard) -> str:
         return f'<p class="bad">Failed: {escape(r.failure_reason or "unknown reason")}</p>'
     if r.status in (VideoStatus.DISCARDED, VideoStatus.EXPIRED):
         return f'<p class="muted">{escape(r.status.value.capitalize())} {_when(r.updated_at)}</p>'
-    if r.status != VideoStatus.AWAITING_APPROVAL:
+    if r.status not in (VideoStatus.AWAITING_APPROVAL, VideoStatus.UPLOADING):
         return f'<p class="muted">Being made: {escape(r.status.value.replace("_", " "))}</p>'
     return ""
 
@@ -161,7 +177,10 @@ def _card(card: VideoCard, view: DashboardView, token: str) -> str:
     why = f'<p class="muted">{escape(card.explanation)}</p>' if card.explanation else ""
     story = (f'<a href="{escape(r.news_url)}" target="_blank" rel="noopener noreferrer">Source story ↗</a>'
              if r.news_url.startswith("https://") else "")
-    actions = _review_actions(card, view, token) if r.status == VideoStatus.AWAITING_APPROVAL else ""
+    actions = {
+        VideoStatus.AWAITING_APPROVAL: _review_actions,
+        VideoStatus.UPLOADING: _uploading_actions,
+    }.get(r.status, lambda *_: "")(card, view, token)
     return (f'<article class="card"><div>{player}</div><div>'
             f'<h2>{escape(r.title or card.meta.get("title") or "Untitled")}</h2>'
             f'<p class="muted">{" · ".join(facts)} · {story}</p>{why}{_status_line(card)}'

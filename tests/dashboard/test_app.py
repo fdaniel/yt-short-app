@@ -118,3 +118,63 @@ def test_video_file_only_inside_data_dir(settings, make_ready_video, tmp_path):
     conn.close()
     (tmp_path / "secret.txt").write_text("x")
     assert dash.video_file(vid) is None
+
+
+def test_failed_save_after_upload_says_it_is_live_and_blocks_reupload(settings, make_ready_video, monkeypatch):
+    import sqlite3
+
+    vid = make_ready_video()
+    account = FakeAccount()
+
+    def locked(self, video_id, youtube_id):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(VideoRepository, "mark_published", locked)
+    message = _dash(settings, account).upload(vid)
+    assert "abcdefghijk" in message and "IS on YouTube" in message
+    assert _status(settings, vid).status == VideoStatus.UPLOADING
+    monkeypatch.undo()
+    assert "already" in _dash(settings, account).upload(vid)
+    assert len(account.uploads) == 1
+
+
+def test_refused_upload_goes_back_to_review(settings, make_ready_video):
+    vid = make_ready_video()
+    _dash(settings, FakeAccount(error=YouTubeError("YouTube refused the upload: quota"))).upload(vid)
+    assert _status(settings, vid).status == VideoStatus.AWAITING_APPROVAL
+
+
+def test_private_upload_is_not_filed_as_published(settings, make_ready_video):
+    vid = make_ready_video()
+    message = _dash(settings, FakeAccount(privacy="private")).upload(vid)
+    assert "private" in message and "by hand" in message
+    assert _status(settings, vid).status == VideoStatus.AWAITING_APPROVAL
+
+
+def test_back_to_review_releases_a_stuck_upload(settings, make_ready_video):
+    vid = make_ready_video()
+    conn = connect(settings.data_dir / "shorts.db")
+    VideoRepository(conn).claim_upload(vid)
+    conn.close()
+    dash = _dash(settings)
+    assert [c.record.id for c in dash.view("review").cards] == [vid]
+    dash.back_to_review(vid)
+    assert _status(settings, vid).status == VideoStatus.AWAITING_APPROVAL
+
+
+def test_already_published_wording(settings, make_ready_video):
+    vid = make_ready_video(status=VideoStatus.APPROVED)
+    assert "already published" in _dash(settings).upload(vid)
+
+
+def test_discard_reports_undeletable_file(settings, make_ready_video, monkeypatch):
+    from pathlib import Path
+
+    vid = make_ready_video()
+
+    def denied(self, missing_ok=False):
+        raise PermissionError("in use")
+
+    monkeypatch.setattr(Path, "unlink", denied)
+    message = _dash(settings).discard(vid)
+    assert "discarded" in message and "could not be deleted" in message

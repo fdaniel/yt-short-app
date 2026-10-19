@@ -58,13 +58,27 @@ MIGRATIONS: tuple[str, ...] = (
     ALTER TABLE videos ADD COLUMN youtube_id TEXT;
     ALTER TABLE videos ADD COLUMN published_at TEXT;
     """,
+    """
+    CREATE INDEX IF NOT EXISTS topics_video_id ON topics(video_id);
+    """,
 )
+BUSY_TIMEOUT_S = 30  # the scheduled run and the dashboard share the database
 
 
 def _migrate(conn: sqlite3.Connection, version: int, sql: str) -> None:
-    """Apply one migration and record it in a single transaction: all of it or none of it."""
+    """Apply one migration and record it in a single transaction: all of it or none of it.
+
+    The write lock is taken first and the version re-read, so a second process opening the
+    database at the same moment skips the migration instead of applying it twice.
+    """
     try:
-        conn.executescript(f"BEGIN;\n{sql}\n;INSERT INTO schema_version (version) VALUES ({int(version)});\nCOMMIT;")
+        conn.execute("BEGIN IMMEDIATE")
+        current = conn.execute("SELECT max(version) FROM schema_version").fetchone()[0] or 0
+        if current < version:
+            for statement in (s for s in sql.split(";") if s.strip()):
+                conn.execute(statement)
+            conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
+        conn.commit()
     except sqlite3.Error:
         conn.rollback()
         raise
@@ -73,7 +87,7 @@ def _migrate(conn: sqlite3.Connection, version: int, sql: str) -> None:
 def connect(db_path: Path) -> sqlite3.Connection:
     """Open (creating if needed) the database and apply pending migrations."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=BUSY_TIMEOUT_S)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)")

@@ -118,3 +118,37 @@ def test_unexpected_error_becomes_notice(client, server, make_ready_video, monke
     response = client.post(f"/videos/{vid}/open-folder", data={"token": server.token})
     assert response.status_code == 303
     assert "disk unplugged" in client.get("/").text
+
+
+@pytest.mark.parametrize("length", ["-1", "abc"])
+def test_bad_content_length_is_400(server, length):
+    import socket
+
+    with socket.create_connection(("127.0.0.1", server.server_address[1]), timeout=5) as sock:
+        sock.sendall(f"POST /videos/1/discard HTTP/1.1\r\nHost: 127.0.0.1:{server.server_address[1]}\r\n"
+                     f"Content-Length: {length}\r\n\r\n".encode())
+        assert sock.recv(64).startswith(b"HTTP/1.0 400")
+
+
+def test_absurd_range_is_ignored(client, make_ready_video):
+    vid = make_ready_video()
+    assert client.get(f"/videos/{vid}.mp4", headers={"Range": "bytes=" + "9" * 5000 + "-"}).status_code == 200
+
+
+def test_videos_are_not_embeddable_by_other_sites(client, make_ready_video):
+    vid = make_ready_video()
+    assert client.get(f"/videos/{vid}.mp4").headers["cross-origin-resource-policy"] == "same-origin"
+
+
+def test_csp_pins_the_page_script(client):
+    csp = client.get("/").headers["content-security-policy"]
+    assert "script-src 'sha256-" in csp and "'unsafe-inline'; form" not in csp.split("script-src")[1][:60]
+
+
+def test_page_error_is_explained(client, server, monkeypatch):
+    def broken(tab):
+        raise ValueError("bad channel.json")
+
+    monkeypatch.setattr(server.dashboard, "view", broken)
+    response = client.get("/")
+    assert response.status_code == 500 and "bad channel.json" in response.text

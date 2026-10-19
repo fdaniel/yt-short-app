@@ -117,3 +117,23 @@ def test_list_recent_newest_first(conn):
     first, second = _ready(repo, "https://a/1"), _ready(repo, "https://a/2")
     assert [r.id for r in repo.list_recent(10)] == [second, first]
     assert [r.id for r in repo.list_recent(1)] == [second]
+
+
+def test_claim_upload_only_once(conn):
+    repo = VideoRepository(conn)
+    vid = _ready(repo)
+    assert repo.claim_upload(vid) is True
+    assert repo.claim_upload(vid) is False
+    assert repo.get(vid).status == VideoStatus.UPLOADING
+
+
+def test_uploading_can_publish_go_back_or_discard(conn):
+    repo = VideoRepository(conn)
+    a, b, c = _ready(repo, "https://a/1"), _ready(repo, "https://a/2"), _ready(repo, "https://a/3")
+    for vid in (a, b, c):
+        repo.claim_upload(vid)
+    repo.mark_published(a, "dQw4w9WgXcQ")
+    repo.set_status(b, VideoStatus.AWAITING_APPROVAL)
+    repo.set_status(c, VideoStatus.DISCARDED)
+    assert [repo.get(v).status for v in (a, b, c)] == [VideoStatus.APPROVED, VideoStatus.AWAITING_APPROVAL,
+                                                       VideoStatus.DISCARDED]

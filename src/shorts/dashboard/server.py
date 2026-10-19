@@ -15,21 +15,24 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from shorts.dashboard.app import Dashboard
-from shorts.dashboard.page import render
+from html import escape
+
+from shorts.dashboard.page import SCRIPT_HASH, render
 
 log = logging.getLogger(__name__)
 
 MAX_FORM_BYTES = 10_000
 CHUNK = 256 * 1024
 _VIDEO = re.compile(r"/videos/(\d{1,9})\.mp4")
-_ACTION = re.compile(r"/videos/(\d{1,9})/(upload|mark-uploaded|discard|open-folder)")
-_RANGE = re.compile(r"bytes=(\d*)-(\d*)")
+_ACTION = re.compile(r"/videos/(\d{1,9})/(upload|mark-uploaded|discard|open-folder|back-to-review)")
+_RANGE = re.compile(r"bytes=(\d{0,18})-(\d{0,18})")
 _SECURITY_HEADERS = {
     "X-Frame-Options": "DENY",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
-    "Content-Security-Policy": "default-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
-    "form-action 'self'; frame-ancestors 'none'",
+    "Content-Security-Policy": f"default-src 'self'; img-src 'self' data:; style-src 'unsafe-inline';"
+    f" script-src '{SCRIPT_HASH}'; form-action 'self'; frame-ancestors 'none'",
+    "Cross-Origin-Resource-Policy": "same-origin",  # other sites cannot embed the videos
 }
 
 
@@ -60,6 +63,7 @@ class DashboardServer(ThreadingHTTPServer):
 
 class _Handler(BaseHTTPRequestHandler):
     server: DashboardServer
+    timeout = 60  # a stalled client cannot hold a thread forever
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A002 (stdlib signature)
         log.debug("%s " + format, self.address_string(), *args)
@@ -86,9 +90,7 @@ class _Handler(BaseHTTPRequestHandler):
         url = urlsplit(self.path)
         query = parse_qs(url.query)
         if url.path == "/":
-            view = self.server.dashboard.view(query.get("tab", ["review"])[0])
-            html = render(view, self.server.token, self.server.pop_notice())
-            self._send(HTTPStatus.OK, html.encode(), "text/html; charset=utf-8", {"Cache-Control": "no-store"})
+            self._page(query.get("tab", ["review"])[0])
             return
         match = _VIDEO.fullmatch(url.path)
         video = self.server.dashboard.video_file(int(match.group(1))) if match else None
@@ -96,6 +98,16 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(HTTPStatus.NOT_FOUND, b"Not found")
             return
         self._stream(video, download="download" in query)
+
+    def _page(self, tab: str) -> None:
+        try:
+            html = render(self.server.dashboard.view(tab), self.server.token, self.server.pop_notice())
+        except Exception as exc:  # show the owner what broke instead of an empty reply
+            log.exception("Dashboard page failed")
+            body = f"<!doctype html><title>Tech Shorts</title><p>The dashboard hit a problem: {escape(str(exc))}</p>"
+            self._send(HTTPStatus.INTERNAL_SERVER_ERROR, body.encode(), "text/html; charset=utf-8")
+            return
+        self._send(HTTPStatus.OK, html.encode(), "text/html; charset=utf-8", {"Cache-Control": "no-store"})
 
     def _stream(self, video: Path, download: bool) -> None:
         size = video.stat().st_size
@@ -130,8 +142,8 @@ class _Handler(BaseHTTPRequestHandler):
                 while remaining > 0 and (chunk := fh.read(min(CHUNK, remaining))):
                     self.wfile.write(chunk)
                     remaining -= len(chunk)
-        except (BrokenPipeError, ConnectionResetError):
-            pass  # the browser stopped playing or seeked elsewhere
+        except OSError:
+            pass  # the browser stopped playing, seeked elsewhere or went quiet
 
     def _origin_ok(self) -> bool:
         origin = self.headers.get("Origin")
@@ -140,7 +152,13 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         if not self._host_ok():
             return
-        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = -1
+        if length < 0:
+            self._send(HTTPStatus.BAD_REQUEST, b"Bad request")
+            return
         if length > MAX_FORM_BYTES:
             self._send(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, b"Form too large")
             return
@@ -159,6 +177,7 @@ class _Handler(BaseHTTPRequestHandler):
             "mark-uploaded": lambda: dashboard.mark_uploaded(video_id, form.get("link", "")),
             "discard": lambda: dashboard.discard(video_id),
             "open-folder": lambda: dashboard.open_folder(video_id),
+            "back-to-review": lambda: dashboard.back_to_review(video_id),
         }
         try:
             self.server.set_notice(actions[action]())

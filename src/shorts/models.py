@@ -34,6 +34,7 @@ class VideoStatus(StrEnum):
     FACT_CHECKED = "fact_checked"
     RENDERING = "rendering"
     AWAITING_APPROVAL = "awaiting_approval"
+    UPLOADING = "uploading"
     APPROVED = "approved"
     DISCARDED = "discarded"
     EXPIRED = "expired"

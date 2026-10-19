@@ -49,6 +49,8 @@ class FakeRequest:
         return (None, None) if self.calls == 1 else (None, self.response)
 
     def execute(self):
+        if self.error:
+            raise self.error
         return self.response
 
 
@@ -106,6 +108,8 @@ def test_upload_error_is_readable(tmp_path):
 
 
 class FakeCreds:
+    refresh_token = "secret"
+
     def to_json(self):
         return '{"refresh_token": "secret"}'
 
@@ -148,3 +152,69 @@ def test_token_refresh_network_failure_is_readable(tmp_path):
     account._load_credentials = offline
     with pytest.raises(YouTubeError, match="no internet"):
         account.upload(tmp_path / "v.mp4", {})
+
+
+def _setup(tmp_path, authorize, channels=None):
+    folder = tmp_path / "youtube"
+    folder.mkdir()
+    (folder / "client_secret.json").write_text("{}")
+    return YouTubeAccount(folder, service_factory=lambda creds: FakeService(channels=channels), authorize=authorize)
+
+
+def test_connect_cancelled_in_browser(tmp_path):
+    from oauthlib.oauth2.rfc6749.errors import AccessDeniedError
+
+    def cancelled(path):
+        raise AccessDeniedError()
+
+    with pytest.raises(NotConnected, match="not allowed"):
+        _setup(tmp_path, cancelled).connect()
+
+
+def test_connect_wrong_client_type(tmp_path):
+    def wrong(path):
+        raise ValueError("Client secrets must be for a web or installed app.")
+
+    with pytest.raises(NotConnected, match="Desktop app"):
+        _setup(tmp_path, wrong).connect()
+
+
+def test_connect_api_not_enabled(tmp_path):
+    error = HttpError(Response({"status": 403}), b'{"error": {"message": "YouTube Data API v3 has not been used"}}')
+    with pytest.raises(NotConnected, match="enable"):
+        _setup(tmp_path, lambda p: FakeCreds(), FakeRequest(error=error)).connect()
+
+
+def test_connect_without_refresh_token_is_refused(tmp_path):
+    class NoRefresh(FakeCreds):
+        refresh_token = None
+
+    channels = FakeRequest({"items": [{"id": "UC9", "snippet": {"title": "My Channel"}}]})
+    with pytest.raises(NotConnected, match="again"):
+        _setup(tmp_path, lambda p: NoRefresh(), channels).connect()
+
+
+def test_damaged_channel_file_means_not_connected(tmp_path):
+    account = _connected(tmp_path, FakeService())
+    (tmp_path / "youtube" / "channel.json").write_text("")
+    assert account.channel() is None
+
+
+def test_damaged_token_asks_to_reconnect(tmp_path):
+    def damaged(path):
+        raise ValueError("missing fields refresh_token")
+
+    account = _connected(tmp_path, FakeService())
+    account._load_credentials = damaged
+    with pytest.raises(NotConnected, match="connect again"):
+        account.upload(tmp_path / "v.mp4", {})
+
+
+def test_description_limit_is_in_bytes():
+    body = upload_body({"title": "t", "description": "é" * 4000, "hashtags": []}, YouTubeSettings())
+    assert len(body["snippet"]["description"].encode()) <= 5000
+
+
+def test_body_survives_odd_metadata():
+    snippet = upload_body({"title": "<>"}, YouTubeSettings())["snippet"]
+    assert snippet["title"] and snippet["description"] == "" and snippet["tags"] == []

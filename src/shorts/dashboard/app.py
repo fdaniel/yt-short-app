@@ -22,7 +22,7 @@ from shorts.storage.topics import TopicRepository
 log = logging.getLogger(__name__)
 
 TABS: dict[str, tuple[VideoStatus, ...]] = {
-    "review": (VideoStatus.AWAITING_APPROVAL,),
+    "review": (VideoStatus.AWAITING_APPROVAL, VideoStatus.UPLOADING),
     "published": (VideoStatus.APPROVED,),
     "making": (VideoStatus.SCRIPTING, VideoStatus.FACT_CHECKED, VideoStatus.RENDERING),
     "discarded": (VideoStatus.DISCARDED, VideoStatus.EXPIRED),
@@ -32,6 +32,15 @@ MAX_VIDEOS = 300
 RUN_LOG_TAIL_BYTES = 64 * 1024
 RUN_LOG_LINES = 8
 _RUN_LOGGERS = (" shorts.auto_cli: ", " shorts.discovery.runner: ")
+
+
+def _already(video_id: int, status: VideoStatus) -> str:
+    states = {
+        VideoStatus.APPROVED: "already published",
+        VideoStatus.UPLOADING: "already being uploaded (if that was interrupted, check YouTube Studio)",
+        VideoStatus.DISCARDED: "discarded",
+    }
+    return f"Video #{video_id} is {states.get(status, status.value.replace('_', ' '))}."
 
 
 class Account(Protocol):
@@ -58,6 +67,7 @@ class DashboardView:
     daily_limit: int
     channel: Channel | None
     run_lines: tuple[str, ...]
+    privacy: str = "public"
 
 
 def _load_meta(path: Path | None) -> dict[str, Any]:
@@ -116,6 +126,7 @@ class Dashboard:
             daily_limit=self._settings.discovery.max_videos_per_day,
             channel=self._account.channel(),
             run_lines=_run_lines(self._settings.data_dir / "run.log"),
+            privacy=self._settings.youtube.privacy_status,
         )
 
     def _card(self, record: VideoRecord, topics: TopicRepository) -> VideoCard:
@@ -144,36 +155,46 @@ class Dashboard:
                 return None
 
     def upload(self, video_id: int) -> str:
-        """Upload through the YouTube API; on success the video counts as published."""
+        """Upload through the YouTube API. The row is claimed first, so no click, process or crash uploads twice."""
         with self._publish_lock, self._db() as conn:
             repo = VideoRepository(conn)
             try:
                 record = repo.get(video_id)
             except KeyError:
                 return f"No video #{video_id}."
-            if record.status != VideoStatus.AWAITING_APPROVAL:
-                return f"Video #{video_id} is already {record.status.value.replace('_', ' ')}."
             video = self._inside_data_dir(record.output_path)
             meta = _load_meta(record.metadata_path)
-            if video is None or not meta.get("title"):
+            if record.status == VideoStatus.AWAITING_APPROVAL and (video is None or not meta.get("title")):
                 return f"Video #{video_id} has no video file or metadata to upload."
+            if not repo.claim_upload(video_id):
+                return _already(video_id, record.status)
             try:
                 result = self._account.upload(video, upload_body(meta, self._settings.youtube))
             except YouTubeError as exc:
                 log.warning("Upload of video #%d failed: %s", video_id, exc)
+                repo.set_status(video_id, VideoStatus.AWAITING_APPROVAL)
                 return f"Video #{video_id} was not uploaded: {exc}"
-            repo.mark_published(video_id, result.video_id)
+            link = f"https://youtube.com/shorts/{result.video_id}"
+            wanted = self._settings.youtube.privacy_status
+            if result.privacy_status and result.privacy_status != wanted:
+                repo.set_status(video_id, VideoStatus.AWAITING_APPROVAL)
+                return (f"YouTube made video #{video_id} {result.privacy_status}, not {wanted} ({link}): until Google"
+                        " approves your app (the audit in the README) API uploads stay private. It is back in"
+                        " To review: upload it by hand to publish it.")
+            try:
+                repo.mark_published(video_id, result.video_id)
+            except sqlite3.Error as exc:
+                log.exception("Video #%d is live as %s but could not be recorded", video_id, result.video_id)
+                return (f"Video #{video_id} IS on YouTube ({link}) but the dashboard could not record it ({exc})."
+                        " Do not upload it again: paste that link below and press Mark as published.")
         log.info("Uploaded video #%d as YouTube %s (%s)", video_id, result.video_id, result.privacy_status)
-        return self._upload_message(video_id, result)
-
-    def _upload_message(self, video_id: int, result: UploadResult) -> str:
         channel = self._account.channel()
-        where = f" to {channel.title}" if channel else ""
-        message = f"Video #{video_id} uploaded{where}: https://youtube.com/shorts/{result.video_id}"
-        wanted = self._settings.youtube.privacy_status
-        if result.privacy_status and result.privacy_status != wanted:
-            message += (f" YouTube set it to {result.privacy_status} instead of {wanted}: until Google approves"
-                        " your app (the audit in the README), API uploads stay private.")
+        return f"Video #{video_id} uploaded{f' to {channel.title}' if channel else ''}: {link}"
+
+    def back_to_review(self, video_id: int) -> str:
+        """After an interrupted upload the owner checked YouTube Studio and the video is not there."""
+        _, message = self._transition(video_id, lambda repo: repo.set_status(video_id, VideoStatus.AWAITING_APPROVAL),
+                                      f"Video #{video_id} is back in To review.")
         return message
 
     def mark_uploaded(self, video_id: int, link: str) -> str:
@@ -193,7 +214,11 @@ class Dashboard:
             video_id, lambda repo: repo.set_status(video_id, VideoStatus.DISCARDED), f"Video #{video_id} discarded."
         )
         if changed and video is not None:
-            video.unlink(missing_ok=True)
+            try:
+                video.unlink(missing_ok=True)
+            except OSError as exc:
+                log.warning("Could not delete %s: %s", video, exc)
+                return f"Video #{video_id} discarded, but its file could not be deleted ({exc}): {video}"
         return message
 
     def _transition(self, video_id: int, change: Callable[[VideoRepository], None], done: str) -> tuple[bool, str]:

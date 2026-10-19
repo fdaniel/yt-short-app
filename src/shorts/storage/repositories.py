@@ -12,10 +12,13 @@ ALLOWED: dict[VideoStatus, set[VideoStatus]] = {
     VideoStatus.FACT_CHECKED: {VideoStatus.RENDERING, VideoStatus.FAILED},
     VideoStatus.RENDERING: {VideoStatus.AWAITING_APPROVAL, VideoStatus.FAILED},
     VideoStatus.AWAITING_APPROVAL: {
+        VideoStatus.UPLOADING,
         VideoStatus.APPROVED,
         VideoStatus.DISCARDED,
         VideoStatus.EXPIRED,
     },
+    # An upload whose outcome is unknown until YouTube answers (or the owner checks YouTube Studio).
+    VideoStatus.UPLOADING: {VideoStatus.APPROVED, VideoStatus.AWAITING_APPROVAL, VideoStatus.DISCARDED},
 }
 
 
@@ -93,6 +96,15 @@ class VideoRepository:
     def list_recent(self, limit: int) -> list[VideoRecord]:
         rows = self._conn.execute("SELECT * FROM videos ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
         return [_record(row) for row in rows]
+
+    def claim_upload(self, video_id: int) -> bool:
+        """Atomically move a video from review to uploading; False if anyone (any process) got there first."""
+        with self._conn:
+            cur = self._conn.execute(
+                "UPDATE videos SET status = ?, updated_at = ? WHERE id = ? AND status = ?",
+                (VideoStatus.UPLOADING.value, _now(), video_id, VideoStatus.AWAITING_APPROVAL.value),
+            )
+        return cur.rowcount == 1
 
     def mark_published(self, video_id: int, youtube_id: str | None) -> None:
         """Approve the video and record where it went live (None: uploaded by hand, link unknown)."""

@@ -45,9 +45,13 @@ def dashboard_command(settings: Settings, port: int, open_browser: bool) -> int:
 
 
 def youtube_connect_command(settings: Settings) -> int:
-    print("A Google page will open: sign in, pick the channel to upload to, and allow access.")
+    print("A Google page will open: sign in, pick the channel to upload to, and allow access.\n"
+          "(If you closed that page, press Ctrl+C and run this again.)")
     try:
         channel = _account(settings).connect()
+    except KeyboardInterrupt:
+        print("\nConnection cancelled; nothing was changed.", file=sys.stderr)
+        return 1
     except NotConnected as exc:
         print(f"Not connected: {exc}", file=sys.stderr)
         return 1

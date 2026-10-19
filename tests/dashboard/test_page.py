@@ -52,3 +52,22 @@ def test_notice_and_daily_count(settings, make_ready_video):
 
 def test_empty_tab_says_so(settings):
     assert "Nothing here yet" in _html(settings)
+
+
+def test_uploading_card_offers_recovery_not_upload(settings, make_ready_video):
+    from shorts.storage.db import connect
+    from shorts.storage.repositories import VideoRepository
+
+    vid = make_ready_video()
+    conn = connect(settings.data_dir / "shorts.db")
+    VideoRepository(conn).claim_upload(vid)
+    conn.close()
+    html = _html(settings)
+    assert f'action="/videos/{vid}/upload"' not in html
+    assert "YouTube Studio" in html and f'action="/videos/{vid}/back-to-review"' in html
+    assert f'action="/videos/{vid}/mark-uploaded"' in html
+
+
+def test_upload_confirm_states_privacy(settings, make_ready_video):
+    make_ready_video()
+    assert "as public" in _html(settings)

@@ -210,3 +210,13 @@ def test_open_on_windows_converts_linux_paths(monkeypatch, tmp_path):
     monkeypatch.setattr(publish_cli.subprocess, "Popen", lambda args, **kw: calls.append(args))
     publish_cli.open_on_windows(tmp_path)
     assert calls == [["wslpath", "-w", str(tmp_path)], ["explorer.exe", "\\\\wsl.localhost\\Ubuntu\\tmp\\x"]]
+
+
+def test_youtube_connect_ctrl_c_is_calm(tmp_path, capsys, monkeypatch):
+    def interrupted(self):
+        raise KeyboardInterrupt
+
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setattr(publish_cli.YouTubeAccount, "connect", interrupted)
+    assert cli.main(["youtube-connect", "--config", str(write_config(tmp_path))]) == 1
+    assert "cancelled" in capsys.readouterr().err.lower()

@@ -1,6 +1,7 @@
 """The owner's YouTube channel: one-time connection, then uploads through the official API."""
 
 import json
+import logging
 import os
 import shutil
 import webbrowser
@@ -17,8 +18,11 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 from google_auth_oauthlib.flow import InstalledAppFlow
+from oauthlib.oauth2.rfc6749.errors import OAuth2Error
 
 from shorts.config import YouTubeSettings
+
+log = logging.getLogger(__name__)
 
 SCOPES = (
     "https://www.googleapis.com/auth/youtube.upload",
@@ -64,13 +68,18 @@ def _tags(hashtags: list[str]) -> list[str]:
     return tags
 
 
+def _description(text: str) -> str:
+    """YouTube counts the description limit in bytes, not characters."""
+    return _plain(text).encode()[:MAX_DESCRIPTION].decode(errors="ignore")
+
+
 def upload_body(meta: dict[str, Any], settings: YouTubeSettings) -> dict[str, Any]:
     """The videos.insert request body for one exported video's metadata.json."""
     return {
         "snippet": {
-            "title": " ".join(_plain(meta["title"]).split())[:MAX_TITLE],
-            "description": _plain(meta["description"])[:MAX_DESCRIPTION],
-            "tags": _tags(meta.get("hashtags", [])),
+            "title": " ".join(_plain(str(meta.get("title", ""))).split())[:MAX_TITLE] or "Tech news",
+            "description": _description(str(meta.get("description", ""))),
+            "tags": _tags([str(h) for h in meta.get("hashtags") or []]),
             "categoryId": settings.category_id,
         },
         "status": {
@@ -90,7 +99,8 @@ def _use_windows_browser() -> None:
 def _authorize(secrets_path: Path) -> Credentials:
     _use_windows_browser()
     flow = InstalledAppFlow.from_client_secrets_file(str(secrets_path), scopes=list(SCOPES))
-    return flow.run_local_server(port=0, open_browser=True)
+    # prompt=consent: Google only hands out the lasting (refresh) token when asked to show consent again.
+    return flow.run_local_server(port=0, open_browser=True, prompt="consent")
 
 
 def _load_credentials(token_path: Path) -> Credentials:
@@ -132,16 +142,32 @@ class YouTubeAccount:
         path = self._folder / CHANNEL
         if not (path.is_file() and (self._folder / TOKEN).is_file()):
             return None
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return Channel(id=data["id"], title=data["title"])
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return Channel(id=str(data["id"]), title=str(data["title"]))
+        except (OSError, ValueError, KeyError, TypeError):
+            return None  # damaged file: treat as not connected, connect() rewrites it
 
     def connect(self) -> Channel:
         """Ask the owner (in the browser) to allow uploads to the channel they pick, and remember it."""
         secrets = self._folder / CLIENT_SECRET
         if not secrets.is_file():
             raise NotConnected(f"put the Google Cloud OAuth file at {secrets} (see README: YouTube upload)")
-        creds = self._authorize(secrets)
-        items = self._service_factory(creds).channels().list(part="snippet", mine=True).execute().get("items", [])
+        try:
+            creds = self._authorize(secrets)
+        except OAuth2Error as exc:
+            raise NotConnected(f"access was not allowed on the Google page ({exc.error}); run this again and"
+                               " press Allow") from exc
+        except ValueError as exc:
+            raise NotConnected(f"{secrets} is not a Desktop app OAuth client (README step 4): {exc}") from exc
+        if not getattr(creds, "refresh_token", None):
+            raise NotConnected("Google did not grant lasting access: remove the app at"
+                               " https://myaccount.google.com/permissions and connect again")
+        try:
+            items = self._service_factory(creds).channels().list(part="snippet", mine=True).execute().get("items", [])
+        except HttpError as exc:
+            raise NotConnected(f"Google refused: {_http_message(exc)}. Did you enable YouTube Data API v3"
+                               " (README step 2)?") from exc
         if not items:
             raise NotConnected("that Google account has no YouTube channel yet: create one, then connect again")
         channel = Channel(id=items[0]["id"], title=items[0]["snippet"]["title"])
@@ -154,8 +180,10 @@ class YouTubeAccount:
             raise NotConnected("YouTube is not connected: run python -m shorts youtube-connect")
         try:
             creds = self._load_credentials(self._folder / TOKEN)
-        except RefreshError as exc:
-            raise NotConnected(f"YouTube access was revoked or expired, connect again: {exc}") from exc
+        except (RefreshError, ValueError) as exc:
+            log.warning("Saved YouTube connection unusable: %s", exc)
+            raise NotConnected("Google no longer accepts the saved connection (revoked, expired or damaged):"
+                               " run python -m shorts youtube-connect to connect again") from exc
         except TransportError as exc:
             raise YouTubeError(f"could not reach Google: {exc}") from exc
         media = MediaFileUpload(str(video_path), mimetype="video/mp4", resumable=True)
@@ -173,8 +201,9 @@ class YouTubeAccount:
     def _write_private(self, name: str, text: str) -> None:
         """Owner-only file: token.json holds a refresh token that can upload to the channel."""
         self._folder.mkdir(parents=True, exist_ok=True)
-        path = self._folder / name
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        tmp = self._folder / f".{name}.tmp"
+        tmp.unlink(missing_ok=True)
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(text)
-        os.chmod(path, 0o600)
+        os.replace(tmp, self._folder / name)  # never a half-written file, even if the PC dies mid-write
