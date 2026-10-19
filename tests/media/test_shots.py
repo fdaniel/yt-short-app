@@ -44,3 +44,23 @@ def test_head_and_tail_skipped(three_scene_video):
 
 def test_too_short_video_returns_empty(synthetic_video):
     assert detect_shots(synthetic_video, 1) == []
+
+
+def test_dark_scenes_are_left_out(tmp_path):
+    # dark trailer moments read as a black screen on a phone
+    out = tmp_path / "dark.mp4"
+    graph = (
+        "testsrc2=size=1920x1080:rate=30:duration=4[a];"
+        "mandelbrot=size=640x360:rate=30,scale=1920:1080,trim=duration=4,setpts=PTS-STARTPTS,"
+        "colorlevels=romax=0.08:gomax=0.08:bomax=0.08[b];"
+        "testsrc2=size=1920x1080:rate=30:duration=4,hue=h=90[c];"
+        "[a][b][c]concat=n=3:v=1:a=0,format=yuv420p[v]"
+    )
+    subprocess.run(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-filter_complex", graph,
+         "-map", "[v]", "-c:v", "libx264", "-preset", "ultrafast", str(out)],
+        check=True,
+    )
+    shots = detect_shots(out, 7, skip_head_s=0, skip_tail_s=0)
+    assert shots
+    assert not any(s.start < 6.0 and s.end > 6.0 for s in shots)
