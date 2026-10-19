@@ -21,9 +21,16 @@ def test_fact_card_needs_facts(tmp_path, font_file):
         render_fact_card("x", [], tmp_path / "f.png", font_file)
 
 
-def test_still_fits_canvas(tmp_path):
+def test_wide_still_keeps_its_full_width_at_screen_height(tmp_path):
+    # the video pans across it, so the whole screen is picture
     src = tmp_path / "s.jpg"
     Image.new("RGB", (1920, 1080), "red").save(src)
+    assert Image.open(render_still(src, tmp_path / "o.png")).size == (3413, 1920)
+
+
+def test_tall_still_covers_the_canvas(tmp_path):
+    src = tmp_path / "s.jpg"
+    Image.new("RGB", (600, 1600), "red").save(src)
     assert Image.open(render_still(src, tmp_path / "o.png")).size == CANVAS
 
 

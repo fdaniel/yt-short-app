@@ -79,7 +79,7 @@ def test_text_panel_is_drawn_over_the_footage(scene, settings, tmp_path, font_fi
     overlay = render_hook_card("DLSS 5 is here", work / "hook_overlay.png", font_file, overlay=True)
     items = [TimelineItem("shot", 10.0, Shot(white, 1, 0.5, 10.5, 1.0), None, overlay)]
     frame = frame_at(render_video(items, narration, ass, None, work / "video.mp4", settings), 5, tmp_path / "f.png")
-    assert mean(frame, (50, 240, 70, 260)) < 100  # the dark panel
+    assert mean(frame, (50, 240, 70, 260)) < 150  # the see-through panel darkens the white footage
     assert mean(frame, (0, 1700, 1080, 1900)) > 200  # footage around it
 
 
@@ -95,3 +95,21 @@ def test_screenshots_move(scene, settings, tmp_path):
     early, late = frame_at(out, 0.5, tmp_path / "a.png"), frame_at(out, 9.0, tmp_path / "b.png")
     # a slow zoom: the white box grows, so the row just above it turns white
     assert mean(late, (400, 560, 680, 590)) > mean(early, (400, 560, 680, 590)) + 40
+
+
+def test_wide_screenshot_pans_and_fills_the_screen(scene, settings, tmp_path):
+    from PIL import Image, ImageDraw
+
+    work, narration, ass, _ = scene
+    still = tmp_path / "wide.png"
+    image = Image.new("RGB", (3413, 1920), "gray")
+    ImageDraw.Draw(image).rectangle((1500, 0, 1900, 1920), fill="white")  # a white column right of centre
+    image.save(still)
+    out = render_video([TimelineItem("image", 10.0, None, still)], narration, ass, None, work / "v.mp4", settings)
+    early, late = frame_at(out, 0.5, tmp_path / "a.png"), frame_at(out, 9.0, tmp_path / "b.png")
+
+    def column(frame):
+        return max(range(0, 1080, 20), key=lambda x: mean(frame, (x, 1500, x + 20, 1700)))
+
+    assert column(late) < column(early) - 200  # the picture moved left: the camera pans right
+    assert mean(late, (0, 1700, 1080, 1900)) > 60  # no dark bands

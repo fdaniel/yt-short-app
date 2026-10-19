@@ -3,6 +3,8 @@
 import shutil
 from pathlib import Path
 
+from PIL import Image
+
 from shorts.config import Settings
 from shorts.media.crop import CropMode, CropPlan, choose_crop
 from shorts.media.ffmpeg import run_ffmpeg
@@ -13,6 +15,7 @@ _SEGMENT_ENCODE = ["-r", "30", "-pix_fmt", "yuv420p", "-c:v", "libx264", "-prese
 _COVER = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920"
 _FPS = 30
 _STILL_ZOOM = 0.08  # a still zooms in this much over its slot, so nothing on screen is frozen
+_PAN = (0.35, 0.65)  # a wide still pans across this part of its overflow during its slot
 
 
 class RenderError(Exception):
@@ -26,7 +29,13 @@ def _shot_filter(plan: CropPlan) -> str:
     return f"{bars}{_COVER},setsar=1,fps=30"
 
 
-def _still_filter(duration: float) -> str:
+def _still_filter(image: Path, duration: float) -> str:
+    """Nothing on screen is frozen: a wide picture pans sideways, any other slowly zooms in."""
+    with Image.open(image) as picture:
+        wide = picture.width > 1080 and picture.height == 1920
+    if wide:
+        start, end = _PAN
+        return f"crop=1080:1920:x='(iw-1080)*({start}+{end - start}*t/{duration:.3f})':y=0,setsar=1,fps={_FPS}"
     # zoompan on a 2x picture: zooming at 1080x1920 visibly jitters
     frames = max(1, round(duration * _FPS))
     return (
@@ -44,7 +53,7 @@ def _render_segment(item: TimelineItem, out: Path, timeout_s: int) -> None:
         background = _shot_filter(plan)
     else:
         inputs = ["-loop", "1", "-framerate", str(_FPS), "-t", length, "-i", str(item.image)]
-        background = _still_filter(item.duration)
+        background = _still_filter(item.image, item.duration)
     graph = f"[0:v]{background}[v]"
     if item.overlay is not None:
         inputs += ["-loop", "1", "-framerate", str(_FPS), "-t", length, "-i", str(item.overlay)]

@@ -6,7 +6,7 @@ and overlay (a dark see-through panel behind the text, drawn over footage).
 
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 from shorts.script.schema import CardFact
 
@@ -99,16 +99,14 @@ def render_fact_card(
 
 
 def render_still(image: Path, out: Path) -> Path:
+    """A screenshot scaled to screen height (the video pans across a wide one), or cropped to cover a tall one."""
     with Image.open(image) as src:
         src = src.convert("RGB")
-        cover_scale = max(CANVAS[0] / src.width, CANVAS[1] / src.height)
-        background = src.resize((round(src.width * cover_scale), round(src.height * cover_scale)))
-        left = (background.width - CANVAS[0]) // 2
-        top = (background.height - CANVAS[1]) // 2
-        background = background.crop((left, top, left + CANVAS[0], top + CANVAS[1]))
-        background = background.filter(ImageFilter.GaussianBlur(30)).point(lambda v: int(v * 0.45))
-        fit_scale = CANVAS[0] / src.width
-        foreground = src.resize((CANVAS[0], round(src.height * fit_scale)))
-        background.paste(foreground, (0, (CANVAS[1] - foreground.height) // 2 - 200))
-    background.save(out)
+        if src.width * CANVAS[1] > src.height * CANVAS[0]:
+            src.resize((round(src.width * CANVAS[1] / src.height), CANVAS[1])).save(out)
+            return out
+        scale = CANVAS[0] / src.width
+        cover = src.resize((CANVAS[0], round(src.height * scale)))
+        top = (cover.height - CANVAS[1]) // 2
+        cover.crop((0, top, CANVAS[0], top + CANVAS[1])).save(out)
     return out
