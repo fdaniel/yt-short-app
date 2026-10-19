@@ -33,7 +33,7 @@ from shorts.sources.pexels import collect_stock_assets
 from shorts.sources.steam import SteamError, collect_steam_assets, fetch_steam_app
 from shorts.text import clean_text
 from shorts.storage.repositories import AssetRepository, BlocklistRepository, VideoRepository
-from shorts.voice.narration import Narration, build_narration
+from shorts.voice.narration import Narration, build_narration, voice_for
 from shorts.voice.tts import TTSEngine
 
 log = logging.getLogger(__name__)
@@ -145,7 +145,8 @@ def _produce(job: _Job) -> VideoResult:
 
 
 def _narrate(draft: ScriptDraft, job: _Job) -> Narration:
-    narration = build_narration(narration_lines(draft), job.deps.tts, job.work / "narration.wav")
+    voice = voice_for(job.video_id, job.settings.voice.voices)
+    narration = build_narration(narration_lines(draft), job.deps.tts, job.work / "narration.wav", voice)
     low, high = job.settings.video.min_narration_s, job.settings.video.max_narration_s
     if not low <= narration.duration <= high:
         raise ValueError(f"narration is {narration.duration:.1f}s, allowed {low:g}–{high:g}s")

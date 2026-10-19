@@ -9,8 +9,7 @@ llm:
   fallback_model: llama-3.3-70b-versatile
 
 voice:
-  kokoro_voice: af_heart
-  lang_code: a
+  voices: [af_heart, am_michael]   # taken in turn, video by video: female, male
   speed: 1.0
 
 video:

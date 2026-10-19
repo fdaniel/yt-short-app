@@ -66,3 +66,25 @@ def test_pexels_key_is_optional_and_read_from_env(tmp_path):
     cfg.write_text("")
     assert load_settings(cfg, {"GEMINI_API_KEY": "k"}).pexels_api_key is None
     assert load_settings(cfg, {"GEMINI_API_KEY": "k", "PEXELS_API_KEY": " p "}).pexels_api_key == "p"
+
+
+
+def test_videos_alternate_a_female_and_a_male_voice_by_default(tmp_path):
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text("")
+    assert load_settings(cfg, {"GEMINI_API_KEY": "k"}).voice.voices == ("af_heart", "am_michael")
+
+
+def test_older_single_voice_config_still_loads(tmp_path):
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text("voice:\n  kokoro_voice: af_heart\n  lang_code: a\n  speed: 1.1\n")
+    voice = load_settings(cfg, {"GEMINI_API_KEY": "k"}).voice
+    assert voice.voices == ("af_heart", "am_michael") and voice.speed == 1.1
+
+
+@pytest.mark.parametrize("voices", ["[]", "['../../etc/passwd']", "['xx_nobody']"])
+def test_bad_voice_names_fail_fast(tmp_path, voices):
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text(f"voice:\n  voices: {voices}\n")
+    with pytest.raises(ConfigError, match="voice"):
+        load_settings(cfg, {"GEMINI_API_KEY": "k"})

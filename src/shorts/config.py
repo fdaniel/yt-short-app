@@ -1,11 +1,12 @@
 """Settings: YAML for behaviour, environment for secrets."""
 
+import re
 from collections.abc import Mapping
 from typing import Literal
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator, model_validator
 
 
 class ConfigError(Exception):
@@ -23,9 +24,27 @@ class LLMSettings(_Frozen):
 
 
 class VoiceSettings(_Frozen):
-    kokoro_voice: str = "af_heart"
-    lang_code: str = "a"
+    # Kokoro voices, taken in turn video by video: a (American) or b (British) English, f/m female/male
+    voices: tuple[str, ...] = ("af_heart", "am_michael")
     speed: float = 1.0
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_single_voice_keys(cls, data: object) -> object:
+        """Older configs named one voice and its language; the language now comes from each voice's name."""
+        if isinstance(data, dict):
+            return {k: v for k, v in data.items() if k not in ("kokoro_voice", "lang_code")}
+        return data
+
+    @field_validator("voices")
+    @classmethod
+    def _known_voice_names(cls, voices: tuple[str, ...]) -> tuple[str, ...]:
+        if not voices:
+            raise ValueError("list at least one voice")
+        for voice in voices:
+            if not re.fullmatch(r"[ab][fm]_[a-z]+", voice):
+                raise ValueError(f"{voice!r} is not a Kokoro English voice name like af_heart or am_michael")
+        return voices
 
 
 class VideoSettings(_Frozen):

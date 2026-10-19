@@ -60,6 +60,7 @@ def test_e2e_no_trailers(settings, conn):
     mock_sources()
     deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
     r = make_video(NEWS, 2, VideoFormat.NEWS_FLASH, settings, deps, conn)
+    assert set(deps.tts.voices) == {"af_heart"}  # video #1: the first voice
     info = probe_video(r.video_path)
     assert (info.width, info.height) == (1080, 1920) and info.has_audio
     meta = json.loads(r.metadata_path.read_text())

@@ -48,7 +48,9 @@ class FakeTTS:
 
     def __init__(self, rate: float = 0.05, sample_rate: int = 24000) -> None:
         self.rate, self.sample_rate = rate, sample_rate
+        self.voices: list[str] = []
 
-    def synthesize(self, text):
+    def synthesize(self, text, voice):
+        self.voices.append(voice)
         return np.zeros(int(len(text) * self.rate * self.sample_rate), np.float32), self.sample_rate
 

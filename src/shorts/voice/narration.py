@@ -23,7 +23,14 @@ class Narration:
     lines: tuple[NarrationLine, ...]
 
 
-def build_narration(lines: list[str], tts: TTSEngine, out_wav: Path, gap_s: float = 0.15) -> Narration:
+def voice_for(video_id: int, voices: tuple[str, ...]) -> str:
+    """Videos take turns between the voices, so the channel has both a female and a male narrator."""
+    return voices[(video_id - 1) % len(voices)]
+
+
+def build_narration(
+    lines: list[str], tts: TTSEngine, out_wav: Path, voice: str, gap_s: float = 0.15
+) -> Narration:
     if not lines:
         raise ValueError("narration needs at least one line")
     pieces: list[np.ndarray] = []
@@ -31,7 +38,7 @@ def build_narration(lines: list[str], tts: TTSEngine, out_wav: Path, gap_s: floa
     cursor = 0.0
     sample_rate = None
     for i, text in enumerate(lines):
-        audio, sample_rate = tts.synthesize(text)
+        audio, sample_rate = tts.synthesize(text, voice)
         if i > 0:
             pieces.append(np.zeros(int(round(gap_s * sample_rate)), np.float32))
             cursor += gap_s

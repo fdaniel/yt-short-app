@@ -4,7 +4,9 @@ Makes short vertical videos (YouTube Shorts) about tech and gaming news, automat
 
 1. reads an **official** news page (NVIDIA, AMD, publishers, …),
 2. writes a 30–55 second script with a free AI, keeping **only facts found in that page** (checked twice, at most one rewrite),
-3. reads it with a free, local AI voice (Kokoro),
+3. reads it with a free, local AI voice (Kokoro), taking turns video by video between a female and a male voice
+   (`voice.voices` in `config.yaml`), and saying tech words the way people do ("ASUS" as a word, "128GB" as
+   "128 gigabytes"; the captions keep the normal spelling),
 4. builds a 1080×1920 video from **short Steam trailer excerpts** (≤ 4 s each, under half the video, trailer sound removed), store screenshots, free **Pexels stock video** (for tech news with no game footage) and its own spec cards shown over the footage,
 5. adds captions, an on-screen credit, and licensed background music,
 6. saves `video.mp4` + `metadata.json` (title, description with source and footage credits, hashtags, licence log) for you to review.
