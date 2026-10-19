@@ -18,14 +18,10 @@ class RenderError(Exception):
 
 
 def _shot_filter(plan: CropPlan) -> str:
+    bars = f"crop=iw:{plan.height}:0:{plan.top}," if plan.height else ""
     if plan.mode == CropMode.SMART:
-        return f"crop=w=ih*9/16:h=ih:x={plan.x}:y=0,scale=1080:1920,setsar=1,fps=30"
-    if plan.mode == CropMode.CENTER:
-        return f"{_COVER},setsar=1,fps=30"
-    return (
-        f"split[a][b];[a]{_COVER},boxblur=20:2[bg];[b]scale=1080:-2[fg];"
-        "[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1,fps=30"
-    )
+        return f"{bars}crop=w=ih*9/16:h=ih:x={plan.x}:y=0,scale=1080:1920,setsar=1,fps=30"
+    return f"{bars}{_COVER},setsar=1,fps=30"
 
 
 def _render_segment(item: TimelineItem, out: Path, timeout_s: int) -> None:

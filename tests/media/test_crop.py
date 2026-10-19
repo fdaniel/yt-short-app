@@ -23,12 +23,35 @@ def test_subject_on_right_is_smart(tmp_path):
     assert plan.mode == CropMode.SMART and 1192 <= plan.x <= 1312
 
 
-def test_flat_frame_is_blurred(tmp_path):
+def test_flat_frame_fills_the_screen_from_the_center(tmp_path):
+    # never a small strip over a blurred copy: that left most of the screen dark
     v = lavfi_video(tmp_path, "color=c=gray:size=1920x1080:duration=2")
     plan = choose_crop(v, 0, 2)
-    assert plan.mode == CropMode.BLURRED and plan.x is None
+    assert plan.mode == CropMode.CENTER and plan.x is None
 
 
 def test_busy_everywhere_is_blurred(tmp_path):
     v = lavfi_video(tmp_path, "testsrc2=size=1920x1080:duration=2")
-    assert choose_crop(v, 0, 2).mode in (CropMode.BLURRED, CropMode.SMART)
+    assert choose_crop(v, 0, 2).mode in (CropMode.CENTER, CropMode.SMART)
+
+
+LETTERBOXED = (
+    "color=c=gray:size=1920x810:duration=2,drawbox=x=150:y=200:w=300:h=400:color=white:t=fill,"
+    "pad=1920:1080:0:135:black"
+)
+
+
+def test_letterbox_bars_are_left_out(tmp_path):
+    # cinematic trailers carry black bars; cropping them in left black bands on the Short
+    plan = choose_crop(lavfi_video(tmp_path, LETTERBOXED), 0, 2)
+    assert abs(plan.top - 135) <= 4 and abs(plan.height - 810) <= 8
+
+
+def test_full_frame_has_no_bars(tmp_path):
+    plan = choose_crop(lavfi_video(tmp_path, "testsrc2=size=1920x1080:duration=2"), 0, 2)
+    assert plan.top == 0 and plan.height is None
+
+
+def test_dark_sky_is_not_taken_for_a_bar(tmp_path):
+    v = lavfi_video(tmp_path, "color=c=gray:size=1920x1080:duration=2,drawbox=x=0:y=0:w=1920:h=300:color=0x282828:t=fill")
+    assert choose_crop(v, 0, 2).height is None

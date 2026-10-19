@@ -43,3 +43,25 @@ def test_render_with_looping_music(scene, settings, tmp_path):
     music = sine_mp3(tmp_path / "music.mp3", seconds=3)
     out = render_video(items, narration, ass, music, work / "video.mp4", settings)
     assert probe_video(out).duration == pytest.approx(10, abs=0.2)
+
+
+def frame_at(video, seconds, out):
+    import subprocess
+
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", str(seconds), "-i", str(video),
+                    "-frames:v", "1", str(out)], check=True)
+    from PIL import Image
+
+    return Image.open(out).convert("L")
+
+
+def test_letterboxed_trailer_fills_the_frame(scene, settings, tmp_path):
+    work, narration, ass, _ = scene
+    boxed = lavfi_video(
+        tmp_path, "color=c=gray:size=1920x810:duration=12,pad=1920:1080:0:135:black", name="boxed.mp4"
+    )
+    items = [TimelineItem("shot", 10.0, Shot(boxed, 1, 0.5, 10.5, 1.0), None)]
+    out = render_video(items, narration, ass, None, work / "video.mp4", settings)
+    frame = frame_at(out, 5, tmp_path / "f.png")
+    for band in ((0, 100, 1080, 230), (0, 1700, 1080, 1900)):  # where the bars used to be
+        assert sum(frame.crop(band).getdata()) / ((band[2] - band[0]) * (band[3] - band[1])) > 60
