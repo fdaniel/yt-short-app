@@ -152,3 +152,8 @@ def test_page_error_is_explained(client, server, monkeypatch):
     monkeypatch.setattr(server.dashboard, "view", broken)
     response = client.get("/")
     assert response.status_code == 500 and "bad channel.json" in response.text
+
+
+def test_page_lets_its_own_buttons_say_where_they_come_from(client):
+    # With "no-referrer" browsers send "Origin: null" on form posts, and every button is refused.
+    assert client.get("/").headers["referrer-policy"] == "same-origin"

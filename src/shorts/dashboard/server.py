@@ -29,7 +29,8 @@ _RANGE = re.compile(r"bytes=(\d{0,18})-(\d{0,18})")
 _SECURITY_HEADERS = {
     "X-Frame-Options": "DENY",
     "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "no-referrer",
+    # Not "no-referrer": with it browsers send "Origin: null" on form posts and every button is refused.
+    "Referrer-Policy": "same-origin",
     "Content-Security-Policy": f"default-src 'self'; img-src 'self' data:; style-src 'unsafe-inline';"
     f" script-src '{SCRIPT_HASH}'; form-action 'self'; frame-ancestors 'none'",
     "Cross-Origin-Resource-Policy": "same-origin",  # other sites cannot embed the videos
