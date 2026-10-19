@@ -46,6 +46,28 @@ class VideoRecord:
     content_hash: str | None
     created_at: str
     updated_at: str
+    youtube_id: str | None = None
+    published_at: str | None = None
+
+
+def _record(row: sqlite3.Row) -> VideoRecord:
+    return VideoRecord(
+        id=row["id"],
+        news_url=row["news_url"],
+        steam_app_id=row["steam_app_id"],
+        format=VideoFormat(row["format"]),
+        status=VideoStatus(row["status"]),
+        failure_reason=row["failure_reason"],
+        title=row["title"],
+        script_json=row["script_json"],
+        output_path=_path_or_none(row["output_path"]),
+        metadata_path=_path_or_none(row["metadata_path"]),
+        content_hash=row["content_hash"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+        youtube_id=row["youtube_id"],
+        published_at=row["published_at"],
+    )
 
 
 class VideoRepository:
@@ -66,29 +88,27 @@ class VideoRepository:
         row = self._conn.execute("SELECT * FROM videos WHERE id = ?", (video_id,)).fetchone()
         if row is None:
             raise KeyError(f"video {video_id} not found")
-        return VideoRecord(
-            id=row["id"],
-            news_url=row["news_url"],
-            steam_app_id=row["steam_app_id"],
-            format=VideoFormat(row["format"]),
-            status=VideoStatus(row["status"]),
-            failure_reason=row["failure_reason"],
-            title=row["title"],
-            script_json=row["script_json"],
-            output_path=_path_or_none(row["output_path"]),
-            metadata_path=_path_or_none(row["metadata_path"]),
-            content_hash=row["content_hash"],
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
-        )
+        return _record(row)
+
+    def list_recent(self, limit: int) -> list[VideoRecord]:
+        rows = self._conn.execute("SELECT * FROM videos ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        return [_record(row) for row in rows]
+
+    def mark_published(self, video_id: int, youtube_id: str | None) -> None:
+        """Approve the video and record where it went live (None: uploaded by hand, link unknown)."""
+        self._check_transition(video_id, VideoStatus.APPROVED)
+        self._update(video_id, status=VideoStatus.APPROVED.value, youtube_id=youtube_id, published_at=_now())
 
     def set_status(
         self, video_id: int, status: VideoStatus, failure_reason: str | None = None
     ) -> None:
+        self._check_transition(video_id, status)
+        self._update(video_id, status=status.value, failure_reason=failure_reason)
+
+    def _check_transition(self, video_id: int, status: VideoStatus) -> None:
         current = self.get(video_id).status
         if status not in ALLOWED.get(current, set()):
             raise InvalidTransition(f"video {video_id}: {current} -> {status} is not allowed")
-        self._update(video_id, status=status.value, failure_reason=failure_reason)
 
     def save_script(self, video_id: int, script_json: str, title: str) -> None:
         self._update(video_id, script_json=script_json, title=title)

@@ -79,3 +79,41 @@ def test_blocklist_case_insensitive(conn):
     BlocklistRepository(conn).add("CD PROJEKT RED", "claim on video 3")
     BlocklistRepository(conn).add("cd projekt red", "second claim")
     assert BlocklistRepository(conn).names() == {"cd projekt red"}
+
+
+def _ready(repo, url="https://a.com"):
+    vid = repo.create(url, None, VideoFormat.NEWS_FLASH)
+    for s in ("fact_checked", "rendering", "awaiting_approval"):
+        repo.set_status(vid, VideoStatus(s))
+    return vid
+
+
+def test_mark_published_records_youtube_id(conn):
+    repo = VideoRepository(conn)
+    vid = _ready(repo)
+    repo.mark_published(vid, "dQw4w9WgXcQ")
+    record = repo.get(vid)
+    assert record.status == VideoStatus.APPROVED
+    assert record.youtube_id == "dQw4w9WgXcQ" and record.published_at is not None
+
+
+def test_mark_published_without_link(conn):
+    repo = VideoRepository(conn)
+    vid = _ready(repo)
+    repo.mark_published(vid, None)
+    assert repo.get(vid).youtube_id is None and repo.get(vid).status == VideoStatus.APPROVED
+
+
+def test_cannot_publish_twice(conn):
+    repo = VideoRepository(conn)
+    vid = _ready(repo)
+    repo.mark_published(vid, None)
+    with pytest.raises(InvalidTransition):
+        repo.mark_published(vid, "dQw4w9WgXcQ")
+
+
+def test_list_recent_newest_first(conn):
+    repo = VideoRepository(conn)
+    first, second = _ready(repo, "https://a/1"), _ready(repo, "https://a/2")
+    assert [r.id for r in repo.list_recent(10)] == [second, first]
+    assert [r.id for r in repo.list_recent(1)] == [second]

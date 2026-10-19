@@ -54,6 +54,10 @@ MIGRATIONS: tuple[str, ...] = (
         created_at TEXT NOT NULL
     );
     """,
+    """
+    ALTER TABLE videos ADD COLUMN youtube_id TEXT;
+    ALTER TABLE videos ADD COLUMN published_at TEXT;
+    """,
 )
 
 
