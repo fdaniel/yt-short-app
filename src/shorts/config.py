@@ -89,6 +89,12 @@ class DiscoverySettings(_Frozen):
     )
 
 
+class YouTubeSettings(_Frozen):
+    privacy_status: Literal["public", "unlisted", "private"] = "public"
+    category_id: str = "28"  # Science & Technology
+    synthetic_media: bool = False  # YouTube's "altered or synthetic content" label
+
+
 class Settings(_Frozen):
     data_dir: Path = Path("~/tech-shorts-data")
     music_dir: Path = Path("assets/music")
@@ -100,6 +106,7 @@ class Settings(_Frozen):
     video: VideoSettings = VideoSettings()
     limits: LimitSettings = LimitSettings()
     discovery: DiscoverySettings = DiscoverySettings()
+    youtube: YouTubeSettings = YouTubeSettings()
 
     @field_validator("data_dir", "music_dir", "font_file")
     @classmethod

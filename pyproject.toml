@@ -21,6 +21,8 @@ dependencies = [
     "opencv-python-headless>=4.9",
     "pillow>=10",
     "feedparser>=6",
+    "google-auth-oauthlib>=1.2",
+    "google-api-python-client>=2.130",
 ]
 
 [project.optional-dependencies]
