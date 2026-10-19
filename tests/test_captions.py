@@ -7,7 +7,8 @@ from tests.fakes import FakeTTS
 
 def test_chunks_stay_inside_their_line(tmp_path):
     n = build_narration(
-        ["NVIDIA just announced DLSS 5 for every RTX card today.", "Big news."], FakeTTS(), tmp_path / "n.wav"
+        ["NVIDIA just announced DLSS 5 for every RTX card today.", "Big news."], FakeTTS(), tmp_path / "n.wav",
+        "af_heart",
     )
     chunks = chunk_captions(n)
     first_line = [c for c in chunks if c.end <= n.lines[0].end + 1e-6]
@@ -20,7 +21,7 @@ def test_chunks_stay_inside_their_line(tmp_path):
 
 def test_long_single_word_kept_whole(tmp_path):
     word = "Supercalifragilisticexpialidocious-Edition"
-    n = build_narration([word], FakeTTS(), tmp_path / "n.wav")
+    n = build_narration([word], FakeTTS(), tmp_path / "n.wav", "af_heart")
     assert [c.text for c in chunk_captions(n)] == [word]
 
 
