@@ -31,11 +31,13 @@ class ScriptDraft(_Frozen):
     card_facts: list[CardFact] = Field(default_factory=list, max_length=6)
     footage_queries: list[str] = Field(default_factory=list)
 
-    @field_validator("footage_queries")
+    @field_validator("footage_queries", mode="before")
     @classmethod
-    def _tidy_queries(cls, queries: list[str]) -> list[str]:
-        """Search terms only steer stock footage, so a sloppy one is trimmed rather than failing the script."""
-        tidy = [" ".join(q.split())[:MAX_QUERY_CHARS].strip() for q in queries]
+    def _tidy_queries(cls, queries: object) -> list[str]:
+        """Search terms only steer stock footage, so sloppy ones are dropped rather than failing the script."""
+        if not isinstance(queries, list):
+            return []
+        tidy = [" ".join(q.split())[:MAX_QUERY_CHARS].strip() for q in queries if isinstance(q, str)]
         return [q for q in tidy if q][:MAX_FOOTAGE_QUERIES]
 
 

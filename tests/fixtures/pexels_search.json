@@ -16,7 +16,7 @@
     {"id": 103, "url": "https://www.pexels.com/video/desk-103/", "duration": 20,
      "user": {"name": "Ben Ito", "url": "https://www.pexels.com/@ben"},
      "video_files": [
-       {"id": 5, "quality": "sd", "file_type": "video/mp4", "width": 540, "height": 960, "link": "https://videos.pexels.com/103-sd.mp4"},
+       {"id": 5, "quality": "sd", "file_type": "video/mp4", "width": 720, "height": 1280, "link": "https://videos.pexels.com/103-sd.mp4"},
        {"id": 6, "quality": "hd", "file_type": "video/webm", "width": 1080, "height": 1920, "link": "https://videos.pexels.com/103-hd.webm"}
      ]}
   ]

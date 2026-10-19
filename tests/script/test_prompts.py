@@ -45,3 +45,12 @@ def test_footage_queries_are_cleaned():
 
     d = draft().model_copy(update={"footage_queries": ["  gaming   laptop ", "", "x" * 80]})
     assert ScriptDraft.model_validate(d.model_dump()).footage_queries == ["gaming laptop", "x" * 40]
+
+
+def test_odd_footage_queries_never_fail_the_script():
+    from shorts.script.schema import ScriptDraft
+
+    data = draft().model_dump()
+    assert ScriptDraft.model_validate({**data, "footage_queries": None}).footage_queries == []
+    assert ScriptDraft.model_validate({**data, "footage_queries": ["laptop", 7, None]}).footage_queries == ["laptop"]
+    assert ScriptDraft.model_validate({**data, "footage_queries": "laptop"}).footage_queries == []

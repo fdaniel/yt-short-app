@@ -28,7 +28,9 @@ MAX_CLIPS = 4
 MAX_PER_QUERY = 2
 MIN_DURATION_S = 5
 MAX_DURATION_S = 60
-FULL_HD_SIDE = 1080
+MIN_SIDE, MAX_SIDE = 720, 1440  # sharp enough for 1080x1920, without downloading 4K
+PAGE_PREFIX = "https://www.pexels.com/"
+FILE_HOSTS = ("videos.pexels.com", "player.vimeo.com")
 _DOWNLOAD_ERRORS = (httpx.HTTPError, DownloadTooLarge, UnsafeURLError, FFmpegError, OSError)
 
 
@@ -45,14 +47,16 @@ def _short_side(file: dict) -> int:
     return min(file["width"], file["height"])
 
 
+def _trusted_file(link: object) -> bool:
+    return isinstance(link, str) and httpx.URL(link).scheme == "https" and httpx.URL(link).host in FILE_HOSTS
+
+
 def _best_file(files: list) -> str | None:
-    """The smallest mp4 at least Full HD on its short side, else the largest mp4 there is."""
-    mp4s = [f for f in files if isinstance(f, dict) and f.get("file_type") == "video/mp4" and f.get("link")
-            and isinstance(f.get("width"), int) and isinstance(f.get("height"), int)]
-    if not mp4s:
-        return None
-    sharp = [f for f in mp4s if _short_side(f) >= FULL_HD_SIDE]
-    return (min(sharp, key=_short_side) if sharp else max(mp4s, key=_short_side))["link"]
+    """The sharpest mp4 between MIN_SIDE and MAX_SIDE on its short side, from a Pexels host."""
+    mp4s = [f for f in files if isinstance(f, dict) and f.get("file_type") == "video/mp4"
+            and _trusted_file(f.get("link")) and isinstance(f.get("width"), int) and isinstance(f.get("height"), int)]
+    fitting = [f for f in mp4s if MIN_SIDE <= _short_side(f) <= MAX_SIDE]
+    return max(fitting, key=_short_side)["link"] if fitting else None
 
 
 def parse_search(payload: object) -> list[StockClip]:
@@ -66,7 +70,8 @@ def parse_search(payload: object) -> list[StockClip]:
         user = video.get("user") if isinstance(video.get("user"), dict) else {}
         if not isinstance(duration, (int, float)) or not MIN_DURATION_S <= duration <= MAX_DURATION_S:
             continue
-        if file_url and isinstance(video.get("url"), str):
+        page = video.get("url")
+        if file_url and isinstance(page, str) and page.startswith(PAGE_PREFIX):
             clips.append(StockClip(video["id"], video["url"], float(duration), str(user.get("name") or "Pexels"),
                                    file_url))
     return clips
@@ -88,10 +93,12 @@ def _asset(clip: StockClip, path: Path) -> Asset:
 
 
 def _download(clip: StockClip, client: httpx.Client, work_dir: Path, timeout_s: int) -> Path:
-    raw = download_file(client, clip.file_url, work_dir / f"stock_{clip.id}_raw.mp4", max_bytes=MAX_CLIP_BYTES)
-    clean = strip_audio(raw, work_dir / f"stock_{clip.id}.mp4", timeout_s=timeout_s)
-    raw.unlink(missing_ok=True)
-    return clean
+    raw = work_dir / f"stock_{clip.id}_raw.mp4"
+    try:
+        download_file(client, clip.file_url, raw, max_bytes=MAX_CLIP_BYTES)
+        return strip_audio(raw, work_dir / f"stock_{clip.id}.mp4", timeout_s=timeout_s)
+    finally:
+        raw.unlink(missing_ok=True)
 
 
 def collect_stock_assets(
@@ -113,13 +120,26 @@ def collect_stock_assets(
         except (httpx.HTTPError, ValueError, DownloadTooLarge, UnsafeURLError) as exc:
             log.warning("Pexels search for %r failed: %s", query, exc)
             continue
-        fresh = [c for c in found if c.id not in seen][:MAX_PER_QUERY]
-        for clip in fresh:
-            if len(assets) == MAX_CLIPS:
-                return assets
-            seen.add(clip.id)
-            try:
-                assets.append(_asset(clip, _download(clip, client, work_dir, settings.limits.ffmpeg_timeout_s)))
-            except _DOWNLOAD_ERRORS as exc:
-                log.warning("Skipping Pexels video %s: %s", clip.id, exc)
+        assets += _download_some(found, seen, min(MAX_PER_QUERY, MAX_CLIPS - len(assets)), client, work_dir,
+                                 settings)
+        if len(assets) >= MAX_CLIPS:
+            break
+    return assets
+
+
+def _download_some(
+    found: list[StockClip], seen: set[int], wanted: int, client: httpx.Client, work_dir: Path, settings: Settings
+) -> list[Asset]:
+    """Up to `wanted` new clips from one search, moving on to the next result when a download fails."""
+    assets: list[Asset] = []
+    for clip in found:
+        if len(assets) >= wanted:
+            break
+        if clip.id in seen:
+            continue
+        seen.add(clip.id)
+        try:
+            assets.append(_asset(clip, _download(clip, client, work_dir, settings.limits.ffmpeg_timeout_s)))
+        except _DOWNLOAD_ERRORS as exc:
+            log.warning("Skipping Pexels video %s: %s", clip.id, exc)
     return assets

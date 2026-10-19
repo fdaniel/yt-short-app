@@ -82,3 +82,43 @@ def test_broken_download_is_skipped(tmp_path, settings, monkeypatch):
     respx.get(url__startswith=SEARCH_URL).respond(200, json=PAYLOAD)
     monkeypatch.setattr(pexels, "download_file", lambda *a, **k: (_ for _ in ()).throw(httpx.ReadTimeout("slow")))
     assert collect_stock_assets(httpx.Client(), "k", ["laptop"], tmp_path, settings) == []
+
+
+def _video(**overrides):
+    base = {"id": 9, "url": "https://www.pexels.com/video/x-9/", "duration": 10, "user": {"name": "A"},
+            "video_files": [{"file_type": "video/mp4", "width": 1080, "height": 1920,
+                             "link": "https://videos.pexels.com/9.mp4"}]}
+    return {**base, **overrides}
+
+
+def test_only_pexels_links_are_trusted():
+    assert parse_search({"videos": [_video(url="https://evil.example/x")]}) == []
+    bad_file = [{"file_type": "video/mp4", "width": 1080, "height": 1920, "link": "http://videos.pexels.com/9.mp4"}]
+    assert parse_search({"videos": [_video(video_files=bad_file)]}) == []
+    odd_link = [{"file_type": "video/mp4", "width": 1080, "height": 1920, "link": 12}]
+    assert parse_search({"videos": [_video(video_files=odd_link)]}) == []
+
+
+def test_prefers_full_hd_over_4k():
+    files = [{"file_type": "video/mp4", "width": w, "height": h, "link": f"https://videos.pexels.com/{w}.mp4"}
+             for w, h in ((2160, 3840), (1440, 2560), (720, 1280))]
+    assert parse_search({"videos": [_video(video_files=files)]})[0].file_url == "https://videos.pexels.com/1440.mp4"
+    four_k_only = files[:1]
+    assert parse_search({"videos": [_video(video_files=four_k_only)]}) == []  # too big to download
+
+
+@respx.mock
+def test_failed_download_tries_the_next_result(tmp_path, settings, monkeypatch, synthetic_video):
+    respx.get(url__startswith=SEARCH_URL).respond(200, json={"videos": [_video(id=i, url=f"https://www.pexels.com/video/{i}/")
+                                                                         for i in range(3)]})
+    calls = []
+
+    def _flaky(client, url, dest, *, max_bytes):
+        calls.append(url)
+        if len(calls) == 1:
+            raise httpx.ReadTimeout("slow")
+        shutil.copy(synthetic_video, dest)
+        return dest
+
+    monkeypatch.setattr(pexels, "download_file", _flaky)
+    assert len(collect_stock_assets(httpx.Client(), "k", ["laptop"], tmp_path, settings)) == pexels.MAX_PER_QUERY
