@@ -84,13 +84,17 @@ def run(cfg, conn, llm, make, *, free=100 * GB, now=NOW):
 
 
 @respx.mock
-def test_makes_one_video_from_best_topic_end_to_end(cfg, conn):
+def test_makes_one_video_from_best_topic_end_to_end(cfg, conn, synthetic_video):
     # no full text in the feed: the page is fetched, as for the AMD and NVIDIA newsroom feeds
     respx.get(HW.url).respond(200, text=rss(*HW_ITEMS[:1], full_text=False))
     respx.get(GAMES.url).respond(200, text=rss())
     respx.get(HW_ITEMS[0][1]).respond(200, text=(FIXTURES / "article_nvidia.html").read_text())
     from shorts.pipeline import make_video
+    from tests.test_pipeline_e2e import mock_pexels
+
+    mock_pexels(synthetic_video)  # hardware news has no game trailer: its footage is stock video
     llm = ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9)]), GOOD, ALL_OK])
+    cfg = cfg.model_copy(update={"pexels_api_key": "pk"})
     report = run_once(cfg, deps(llm), conn, now=NOW, free_bytes=lambda _: 100 * GB, make=make_video)
     assert len(report.made) == 1 and report.made[0].video_path.exists()
     row = conn.execute("SELECT status, video_id, explanation FROM topics").fetchone()

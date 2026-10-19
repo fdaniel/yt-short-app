@@ -10,11 +10,11 @@ def shot(i, length=6.0, name="t"):
     return Shot(Path(f"{name}{i}.mp4"), i, 10.0, 10.0 + length, 1.0)
 
 
-def card(name):
-    return Card(Path(f"{name}.png"), Path(f"{name}_overlay.png"))
+def card(name, overlay=True):
+    return Card(Path(f"{name}.png"), Path(f"{name}_overlay.png") if overlay else None)
 
 
-CARDS = [card("hook"), card("facts"), card("fact0")]
+CARDS = [card("hook"), card("facts", overlay=False), card("fact0"), card("fact1")]
 KW = dict(slot_s=3.5, max_shot_s=4.0, max_trailer_share=0.49)
 
 
@@ -56,22 +56,30 @@ def test_stock_alone_fills_the_video_and_repeats_when_short():
     assert all(i.shot.end - i.shot.start == pytest.approx(i.duration) for i in items)
 
 
-def test_text_goes_over_footage_hook_first():
-    items = plan(30.0, stock=[shot(i, name="s") for i in range(20)])
-    assert items[0].overlay == Path("hook_overlay.png")
-    assert [i.overlay for i in items[1:4]] == [Path("facts_overlay.png"), None, Path("fact0_overlay.png")]
+def test_text_goes_over_footage_hook_first_then_every_third_slot():
+    items = plan(40.0, stock=[shot(i, name="s") for i in range(20)])
+    overlays = [i.overlay.name if i.overlay else None for i in items]
+    assert overlays[:8] == ["hook_overlay.png", "fact0_overlay.png", None, None, "fact1_overlay.png", None, None,
+                            "fact0_overlay.png"]  # the hook is not repeated; the fact table is never an overlay
 
 
-def test_stills_are_backgrounds_when_there_is_no_video():
+def test_stills_are_backgrounds_with_nothing_over_them():
+    # a panel over a screenshot hides the screenshot
     items = plan(30.0, stills=[Path("a.jpg"), Path("b.jpg")])
     assert [i.image for i in items[:3]] == [Path("a.jpg"), Path("b.jpg"), Path("a.jpg")]
-    assert items[0].overlay == Path("hook_overlay.png") and items[0].kind == "image"
+    assert all(i.kind == "image" and i.overlay is None for i in items)
 
 
 def test_full_cards_only_without_any_footage():
     items = plan(30.0)
     assert {i.kind for i in items} == {"image"} and all(i.overlay is None for i in items)
-    assert [i.image.name for i in items[:3]] == ["hook.png", "facts.png", "fact0.png"]
+    assert [i.image.name for i in items[:5]] == ["hook.png", "facts.png", "fact0.png", "fact1.png", "facts.png"]
+
+
+def test_pieces_cut_to_exactly_one_slot_are_used():
+    # 42 s / 12 slots = 3.5 s, and 4.6 - 1.1 is 3.4999999999999996 in floating point
+    items = plan(42.0, stock=[Shot(Path("s.mp4"), 1, 1.1, 4.6, 1.0)], cards=[])
+    assert all(i.kind == "shot" for i in items)
 
 
 def test_short_shots_skipped():

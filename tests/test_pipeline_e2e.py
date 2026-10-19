@@ -133,18 +133,88 @@ def test_e2e_hardware_story_gets_stock_footage(pexels_settings, conn, synthetic_
     assert probe_video(r.video_path).height == 1920
 
 
+def steam_media(video, screenshot=None):
+    def _assets(*args, **kwargs):
+        made = [Asset(None, AssetKind.TRAILER, video, "https://steam/x.mp4", "steam", "Pub", RightsBasis.STORE_PROMO,
+                      "steam-store-promo", True, datetime.now(UTC))]
+        if screenshot:
+            made.append(Asset(None, AssetKind.SCREENSHOT, screenshot, "https://steam/s.jpg", "steam", "Pub",
+                              RightsBasis.STORE_PROMO, "steam-store-promo", False, datetime.now(UTC)))
+        return made
+
+    return _assets
+
+
+def trailer_scenes_of(length):
+    """Trailer scenes of `length` seconds; downloaded stock clips keep their real scenes."""
+    from shorts.media.shots import detect_shots as real
+
+    def _detect(path, asset_id, **kwargs):
+        if path.name.startswith("stock"):
+            return real(path, asset_id, **kwargs)
+        return [Shot(path, asset_id, 0.5 + k * length, 0.5 + (k + 1) * length, 1.0) for k in range(8)]
+
+    return _detect
+
+
+@pytest.fixture
+def screenshot(tmp_path):
+    path = tmp_path / "shot.jpg"
+    path.write_bytes(png_bytes(1920, 1080))
+    return path
+
+
 @respx.mock
-def test_e2e_game_with_trailer_does_not_search_stock(pexels_settings, conn, synthetic_video, monkeypatch):
+def test_e2e_game_with_trailer_and_screenshots_does_not_search_stock(
+    pexels_settings, conn, synthetic_video, screenshot, monkeypatch
+):
     mock_sources()
     search = mock_pexels(synthetic_video)
-    trailer = AssetKind.TRAILER
-    monkeypatch.setattr("shorts.pipeline.collect_steam_assets", lambda *a, **k: [
-        Asset(None, trailer, synthetic_video, "https://steam/x.mp4", "steam", "Pub", RightsBasis.STORE_PROMO,
-              "steam-store-promo", True, datetime.now(UTC))])
-    monkeypatch.setattr("shorts.pipeline.detect_shots", lambda path, asset_id, **k: [Shot(path, asset_id, 0.5, 5.5, 1.0)])
+    monkeypatch.setattr("shorts.pipeline.collect_steam_assets", steam_media(synthetic_video, screenshot))
+    monkeypatch.setattr("shorts.pipeline.detect_shots", trailer_scenes_of(5.0))
     deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
     make_video(NEWS, 2, VideoFormat.NEWS_FLASH, pexels_settings, deps, conn)
     assert search.call_count == 0
+
+
+@respx.mock
+def test_e2e_trailer_with_only_short_scenes_gets_stock(pexels_settings, conn, synthetic_video, monkeypatch):
+    # fast-cut trailers: every scene shorter than a slot, so none can be used
+    mock_sources()
+    search = mock_pexels(synthetic_video)
+    monkeypatch.setattr("shorts.pipeline.collect_steam_assets", steam_media(synthetic_video))
+    monkeypatch.setattr("shorts.pipeline.detect_shots", trailer_scenes_of(2.0))
+    deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
+    r = make_video(NEWS, 2, VideoFormat.NEWS_FLASH, pexels_settings, deps, conn)
+    assert search.call_count >= 1
+    assert AssetKind.STOCK_VIDEO in {a.kind for a in AssetRepository(conn).list_for_video(r.video_id)}
+
+
+@respx.mock
+def test_e2e_trailer_with_only_short_scenes_and_no_stock_is_refused(settings, conn, synthetic_video, monkeypatch):
+    mock_sources()
+    monkeypatch.setattr("shorts.pipeline.collect_steam_assets", steam_media(synthetic_video))
+    monkeypatch.setattr("shorts.pipeline.detect_shots", trailer_scenes_of(2.0))
+    deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
+    with pytest.raises(PipelineError, match="no footage"):
+        make_video(NEWS, 2, VideoFormat.NEWS_FLASH, settings, deps, conn)
+
+
+@respx.mock
+def test_e2e_broken_stock_clip_is_skipped(pexels_settings, conn, synthetic_video, monkeypatch):
+    mock_sources()
+    mock_pexels(synthetic_video)
+    from shorts.media.ffmpeg import FFmpegError
+    from shorts.media.shots import detect_shots as real
+
+    def _detect(path, asset_id, **kwargs):
+        if path.name == "stock_101.mp4":
+            raise FFmpegError("ffprobe failed")
+        return real(path, asset_id, **kwargs)
+
+    monkeypatch.setattr("shorts.pipeline.detect_shots", _detect)
+    deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
+    assert make_video(NEWS, None, VideoFormat.NEWS_FLASH, pexels_settings, deps, conn).video_path.exists()
 
 
 @respx.mock

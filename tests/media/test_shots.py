@@ -64,3 +64,15 @@ def test_dark_scenes_are_left_out(tmp_path):
     shots = detect_shots(out, 7, skip_head_s=0, skip_tail_s=0)
     assert shots
     assert not any(s.start < 6.0 and s.end > 6.0 for s in shots)
+
+
+def test_half_dark_scene_counts_as_dark(tmp_path):
+    # the black half is part of the picture, not letterbox bars, so it counts towards the darkness
+    v = tmp_path / "half.mp4"
+    subprocess.run(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i",
+         "color=c=0x3c3c3c:size=1920x1080:rate=30:duration=4,drawbox=x=0:y=0:w=1920:h=540:color=black:t=fill",
+         "-pix_fmt", "yuv420p", "-c:v", "libx264", "-preset", "ultrafast", str(v)],
+        check=True,
+    )
+    assert detect_shots(v, 1, skip_head_s=0, skip_tail_s=0) == []

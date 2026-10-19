@@ -16,7 +16,7 @@ BACKGROUND = (11, 15, 20)
 ACCENT = (61, 220, 151)
 TEXT = (245, 247, 250)
 MUTED = (150, 160, 175)
-PANEL = (*BACKGROUND, 200)
+PANEL = (*BACKGROUND, 150)  # about 60% dark: text stays readable, footage shows through
 PANEL_PADDING = 40
 PANEL_RADIUS = 28
 

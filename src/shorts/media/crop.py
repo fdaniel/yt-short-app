@@ -10,8 +10,9 @@ import numpy as np
 _PORTRAIT_SLACK = 1.05
 _SAMPLES = 5
 _SUBJECT_RATIO = 1.15
-_BAR_LUMA = 20  # rows darker than this in every sample are letterbox bars
+_BAR_LUMA = 12  # rows darker than this in every sample can be letterbox bars
 _MIN_BAR_SHARE = 0.03
+_BAR_BALANCE = 0.75  # letterbox bars come in pairs of (nearly) equal size; a dark sky does not
 _MIN_CONTENT_SHARE = 0.5
 
 
@@ -40,15 +41,16 @@ def _grey_samples(capture: cv2.VideoCapture, start: float, end: float) -> list[n
     return frames
 
 
-def _content_rows(frames: list[np.ndarray]) -> tuple[int, int | None]:
+def letterbox(row_brightness: np.ndarray) -> tuple[int, int | None]:
     """(top, height) of the picture between black letterbox bars; (0, None) when there are none."""
-    full = frames[0].shape[0]
-    lit = np.flatnonzero(np.max([f.mean(axis=1) for f in frames], axis=0) >= _BAR_LUMA)
+    full = len(row_brightness)
+    lit = np.flatnonzero(row_brightness >= _BAR_LUMA)
     if lit.size == 0:
         return 0, None
     top, bottom = int(lit[0]), full - 1 - int(lit[-1])
     height = full - top - bottom
-    if max(top, bottom) < full * _MIN_BAR_SHARE or height < full * _MIN_CONTENT_SHARE:
+    paired = min(top, bottom) >= _BAR_BALANCE * max(top, bottom)
+    if min(top, bottom) < full * _MIN_BAR_SHARE or not paired or height < full * _MIN_CONTENT_SHARE:
         return 0, None
     even_top = top + top % 2  # even values for yuv420p, still inside the picture
     even_height = height - (even_top - top)
@@ -76,7 +78,7 @@ def choose_crop(video: Path, start: float, end: float) -> CropPlan:
         capture.release()
     if not frames:
         return CropPlan(CropMode.CENTER)
-    top, content_h = _content_rows(frames)
+    top, content_h = letterbox(np.max([f.mean(axis=1) for f in frames], axis=0))
     if content_h is not None:
         frames = [f[top : top + content_h] for f in frames]
     window = round((content_h or height) * 9 / 16)

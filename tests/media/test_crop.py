@@ -30,7 +30,7 @@ def test_flat_frame_fills_the_screen_from_the_center(tmp_path):
     assert plan.mode == CropMode.CENTER and plan.x is None
 
 
-def test_busy_everywhere_is_blurred(tmp_path):
+def test_busy_everywhere_fills_the_screen(tmp_path):
     v = lavfi_video(tmp_path, "testsrc2=size=1920x1080:duration=2")
     assert choose_crop(v, 0, 2).mode in (CropMode.CENTER, CropMode.SMART)
 
@@ -52,6 +52,7 @@ def test_full_frame_has_no_bars(tmp_path):
     assert plan.top == 0 and plan.height is None
 
 
-def test_dark_sky_is_not_taken_for_a_bar(tmp_path):
-    v = lavfi_video(tmp_path, "color=c=gray:size=1920x1080:duration=2,drawbox=x=0:y=0:w=1920:h=300:color=0x282828:t=fill")
+def test_night_sky_is_not_taken_for_a_bar(tmp_path):
+    # real letterbox bars come in equal pairs; a dark sky is only at the top
+    v = lavfi_video(tmp_path, "color=c=gray:size=1920x1080:duration=2,drawbox=x=0:y=0:w=1920:h=330:color=0x0a0a0a:t=fill")
     assert choose_crop(v, 0, 2).height is None

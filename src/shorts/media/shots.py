@@ -7,11 +7,11 @@ import cv2
 import numpy as np
 from scenedetect import AdaptiveDetector, detect
 
+from shorts.media.crop import letterbox
 from shorts.media.ffmpeg import probe_video
 
 _SAMPLE_FPS = 2.0
 _SAMPLE_WIDTH = 320
-_BAR_LUMA = 20  # rows this dark are letterbox bars, not picture
 _MIN_BRIGHTNESS = 40  # darker scenes read as a black screen on a phone
 
 
@@ -43,8 +43,8 @@ def _small_frame(capture: cv2.VideoCapture, at: float) -> np.ndarray | None:
 def _brightness(frame: np.ndarray) -> float:
     """Mean lightness (strongest colour channel, so pure blue is not "dark"), ignoring letterbox bars."""
     rows = frame.max(axis=2).astype(np.float32).mean(axis=1)
-    picture = rows[rows >= _BAR_LUMA]
-    return float(picture.mean()) if picture.size else 0.0
+    top, height = letterbox(rows)
+    return float(rows[top : top + height].mean() if height else rows.mean())
 
 
 def _score(capture: cv2.VideoCapture, start: float, end: float) -> float | None:

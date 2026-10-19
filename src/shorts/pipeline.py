@@ -19,7 +19,7 @@ from shorts.media.cards import render_fact_card, render_hook_card, render_still
 from shorts.media.ffmpeg import FFmpegError
 from shorts.media.render import render_video
 from shorts.media.shots import Shot, detect_shots
-from shorts.media.timeline import Card, plan_timeline
+from shorts.media.timeline import Card, plan_timeline, usable_trailer_shots
 from shorts.metadata import build_metadata, content_hash, write_metadata
 from shorts.models import Asset, AssetKind, RightsBasis, VideoFormat, VideoStatus
 from shorts.music import pick_music
@@ -43,6 +43,7 @@ _STEAM_ERRORS = (SteamError, httpx.HTTPError, ValueError, OSError, FFmpegError, 
 _STOCK_ERRORS = (httpx.HTTPError, ValueError, OSError, FFmpegError, DownloadTooLarge, UnsafeURLError)
 # when the script suggests no search terms of its own
 DEFAULT_FOOTAGE_QUERIES = ("computer hardware", "gaming setup", "circuit board closeup")
+STOCK_TAIL_S = 0.3
 
 
 class PipelineError(Exception):
@@ -61,6 +62,14 @@ class VideoResult:
     video_id: int
     video_path: Path
     metadata_path: Path
+
+
+@dataclass(frozen=True)
+class _Visuals:
+    assets: list[Asset]  # every asset used, already in the rights log
+    trailer: list[Shot]  # only shots the timeline can use
+    stock: list[Shot]
+    stills: list[Path]
 
 
 @dataclass(frozen=True)
@@ -115,12 +124,11 @@ def _produce(job: _Job) -> VideoResult:
 
     videos.set_status(job.video_id, VideoStatus.RENDERING)
     narration = _narrate(draft, job)
-    assets = _gather_assets(draft, article, job)
-    trailer, stock, stills = _trailer_shots(assets), _stock_shots(assets, s.video.slot_s), _stills(assets, job)
-    if not (trailer or stock or stills):
-        raise ValueError(_no_footage_reason(s))
+    visuals = _gather_visuals(draft, article, job, narration.duration)
+    assets = visuals.assets
     items = plan_timeline(
-        narration.duration, trailer=trailer, stock=stock, stills=stills, cards=_card_pairs(assets),
+        narration.duration, trailer=visuals.trailer, stock=visuals.stock, stills=visuals.stills,
+        cards=_card_pairs(assets),
         slot_s=s.video.slot_s, max_shot_s=s.video.max_shot_s, max_trailer_share=s.video.max_trailer_share,
     )
     ass = write_ass(chunk_captions(narration), _credit(assets, article), job.work / "captions.ass")
@@ -155,10 +163,10 @@ def _steam_assets(job: _Job, blocked: set[str]) -> list[Asset]:
         return []
 
 
-def _stock_assets(draft: ScriptDraft, job: _Job, has_trailer: bool) -> list[Asset]:
-    """Licensed stock video, only for stories with no game trailer (mostly hardware news)."""
+def _stock_assets(draft: ScriptDraft, job: _Job) -> list[Asset]:
+    """Licensed stock video (Pexels), when a key is set."""
     key = job.settings.pexels_api_key
-    if has_trailer or not key:
+    if not key:
         return []
     queries = draft.footage_queries or list(DEFAULT_FOOTAGE_QUERIES)
     try:
@@ -194,21 +202,33 @@ def _cards(draft: ScriptDraft, article: Article, job: _Job) -> list[Asset]:
     render_hook_card(hook, _overlay_path(paths[0]), font, overlay=True)
     if draft.card_facts:
         title = clean_text(article.title or draft.title_options[0])
-        named = [("card_facts.png", draft.card_facts)]
-        named += [(f"card_fact_{i}.png", [fact]) for i, fact in enumerate(draft.card_facts)]
-        for name, facts in named:
-            paths.append(render_fact_card(title, facts, job.work / name, font))
-            render_fact_card(title, facts, _overlay_path(paths[-1]), font, overlay=True)
-    return [_card(path) for path in paths]  # the overlay is the same generated card, logged once
+        # the all-facts table is full screen only: as a panel it would cover most of the footage
+        paths.append(render_fact_card(title, draft.card_facts, job.work / "card_facts.png", font))
+        for i, fact in enumerate(draft.card_facts):
+            paths.append(render_fact_card(title, [fact], job.work / f"card_fact_{i}.png", font))
+            render_fact_card(title, [fact], _overlay_path(paths[-1]), font, overlay=True)
+    return [_card(path) for path in paths]  # an overlay is the same generated card, logged once
 
 
-def _gather_assets(draft: ScriptDraft, article: Article, job: _Job) -> list[Asset]:
+def _gather_visuals(draft: ScriptDraft, article: Article, job: _Job, duration: float) -> _Visuals:
+    """Game footage first; stock video when the game footage cannot fill the video on its own."""
     blocked = BlocklistRepository(job.conn).names()
-    steam = _steam_assets(job, blocked)
-    stock = _stock_assets(draft, job, any(a.kind == AssetKind.TRAILER for a in steam))
-    candidates = steam + stock + _cards(draft, article, job)
+    video = job.settings.video
+    steam = _log_usable(_steam_assets(job, blocked), blocked, job)
+    trailer = usable_trailer_shots(_trailer_shots(steam), duration, slot_s=video.slot_s, max_shot_s=video.max_shot_s)
+    stills = _stills(steam, job)
+    # with both, trailer and screenshots fill the video; generic stock would only dilute game news
+    stock_assets = [] if trailer and stills else _log_usable(_stock_assets(draft, job), blocked, job)
+    stock = _stock_shots(stock_assets, video.slot_s)
+    if not (trailer or stock or stills):
+        raise ValueError(_no_footage_reason(job.settings))
     music = pick_music(job.settings.music_dir, random.Random(job.video_id))
-    candidates += [music] if music else []
+    rest = _log_usable(_cards(draft, article, job) + ([music] if music else []), blocked, job)
+    return _Visuals(steam + stock_assets + rest, trailer, stock, stills)
+
+
+def _log_usable(candidates: list[Asset], blocked: set[str], job: _Job) -> list[Asset]:
+    """The rights gate: assets that pass are written to the rights log, the rest are dropped."""
     repo = AssetRepository(job.conn)
     usable = []
     for asset in candidates:
@@ -222,7 +242,8 @@ def _gather_assets(draft: ScriptDraft, article: Article, job: _Job) -> list[Asse
 
 
 def _card_pairs(assets: list[Asset]) -> list[Card]:
-    return [Card(a.local_path, _overlay_path(a.local_path)) for a in assets if a.kind == AssetKind.CARD]
+    cards = [a.local_path for a in assets if a.kind == AssetKind.CARD]
+    return [Card(path, _overlay_path(path) if _overlay_path(path).is_file() else None) for path in cards]
 
 
 def _stills(assets: list[Asset], job: _Job) -> list[Path]:
@@ -248,13 +269,19 @@ def _pieces(shot: Shot, length: float) -> list[Shot]:
             for k in range(count)]
 
 
+def _clip_pieces(asset: Asset, length: float) -> list[Shot]:
+    try:
+        # a small tail margin: a clip's video often ends a few frames before its container does
+        shots = detect_shots(asset.local_path, asset.id, skip_head_s=0, skip_tail_s=STOCK_TAIL_S)
+    except (FFmpegError, OSError, ValueError) as exc:
+        log.warning("Skipping stock clip %s that could not be read: %s", asset.source_url, exc)
+        return []
+    return [piece for shot in shots for piece in _pieces(shot, length)]
+
+
 def _stock_shots(assets: list[Asset], length: float) -> list[Shot]:
     """Every clip cut into slot-sized pieces, taken in turn from each clip so the same one never runs twice."""
-    per_clip = [
-        [piece for shot in detect_shots(a.local_path, a.id, skip_head_s=0, skip_tail_s=0)
-         for piece in _pieces(shot, length)]
-        for a in assets if a.kind == AssetKind.STOCK_VIDEO
-    ]
+    per_clip = [_clip_pieces(a, length) for a in assets if a.kind == AssetKind.STOCK_VIDEO]
     return [piece for piece in chain.from_iterable(zip_longest(*per_clip)) if piece is not None]
 
 

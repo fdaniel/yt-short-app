@@ -48,7 +48,7 @@ def _assert_see_through_panel(path):
     assert image.mode == "RGBA" and image.size == CANVAS
     alpha = image.getchannel("A")
     assert alpha.getpixel((5, 5)) == 0 and alpha.getpixel((540, 1800)) == 0  # footage shows around the panel
-    assert 150 <= alpha.getpixel((60, 300)) < 255  # a dark, slightly see-through panel behind the text
+    assert 120 <= alpha.getpixel((60, 300)) <= 170  # a see-through panel: the footage shows through it
     assert alpha.getextrema()[1] == 255  # the text itself is solid
 
 
