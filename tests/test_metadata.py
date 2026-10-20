@@ -86,3 +86,10 @@ def test_stock_footage_credits_each_filmmaker_and_pexels(make_asset):
     assert "Stock footage: Ana Silva via Pexels (https://www.pexels.com/video/laptop-101/)" in m.description
     assert "Stock footage: Ben Ito via Pexels (https://www.pexels.com/video/desk-103/)" in m.description
     assert "Footage: Ana" not in m.description
+
+
+def test_stock_footage_names_the_site_it_came_from(make_asset):
+    clip = make_asset(kind=AssetKind.STOCK_VIDEO, rightsholder="Carla Reis", source_platform="pixabay",
+                      source_url="https://pixabay.com/videos/laptop-201/", rights_basis=RightsBasis.LICENSED)
+    m = build_metadata(draft(), article(), [clip])
+    assert "Stock footage: Carla Reis via Pixabay (https://pixabay.com/videos/laptop-201/)" in m.description

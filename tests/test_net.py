@@ -94,3 +94,30 @@ def test_fetch_text_sends_extra_headers():
     route = respx.get("https://api.example.com/x").respond(200, text="ok")
     assert fetch_text(httpx.Client(), "https://api.example.com/x", max_bytes=100, headers={"Authorization": "k"}) == "ok"
     assert route.calls.last.request.headers["Authorization"] == "k"
+
+
+def test_redact_hides_keys_in_addresses():
+    from shorts.net import redact
+
+    assert redact("GET https://pixabay.com/api/videos/?key=abc-123&q=laptop") == \
+        "GET https://pixabay.com/api/videos/?key=***&q=laptop"
+    assert redact("for url 'https://x.com/?q=a&api_key=zz'") == "for url 'https://x.com/?q=a&api_key=***'"
+    assert redact("no secrets here") == "no secrets here"
+
+
+@respx.mock
+def test_request_log_never_shows_the_key(caplog):
+    import logging
+
+    caplog.set_level(logging.INFO)
+    respx.get(url__startswith="https://pixabay.com/").respond(200, text="ok")
+    with httpx.Client() as client:
+        fetch_text(client, "https://pixabay.com/api/videos/?key=SECRET-KEY-42&q=laptop", max_bytes=100)
+    assert "HTTP Request" in caplog.text
+    assert "SECRET-KEY-42" not in caplog.text
+
+
+def test_key_hiding_never_breaks_a_badly_formatted_log_line():
+    import logging
+
+    logging.getLogger("httpx").info("bad %s %s", 1)  # logging reports the mistake itself instead of raising

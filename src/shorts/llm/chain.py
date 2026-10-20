@@ -33,6 +33,8 @@ def build_llm(settings: Settings, http: httpx.Client) -> FallbackLLM:
     providers: list[LLMProvider] = [
         GeminiProvider(settings.gemini_api_key, settings.llm.gemini_model)
     ]
+    if settings.llm.gemini_backup_model:
+        providers.append(GeminiProvider(settings.gemini_api_key, settings.llm.gemini_backup_model, name="gemini-lite"))
     if settings.fallback_api_key:
         providers.append(
             OpenAICompatProvider(

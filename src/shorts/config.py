@@ -19,6 +19,8 @@ class _Frozen(BaseModel):
 
 class LLMSettings(_Frozen):
     gemini_model: str = "gemini-flash-latest"
+    # same free key, lighter model: often answers while the main one is "experiencing high demand"; null = off
+    gemini_backup_model: str | None = "gemini-flash-lite-latest"
     fallback_base_url: str = "https://api.groq.com/openai/v1"
     fallback_model: str = "llama-3.3-70b-versatile"
 
@@ -120,7 +122,9 @@ class Settings(_Frozen):
     font_file: Path = Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
     gemini_api_key: str
     fallback_api_key: str | None = None
-    pexels_api_key: str | None = None  # optional: stock footage for stories with no game trailer
+    # optional: stock footage for stories with no game trailer (Pixabay is tried first)
+    pixabay_api_key: str | None = None
+    pexels_api_key: str | None = None
     llm: LLMSettings = LLMSettings()
     voice: VoiceSettings = VoiceSettings()
     video: VideoSettings = VideoSettings()
@@ -146,9 +150,11 @@ def load_settings(config_path: Path, env: Mapping[str, str]) -> Settings:
     if not gemini_key:
         raise ConfigError("GEMINI_API_KEY is not set (put it in .env)")
     fallback_key = (env.get("FALLBACK_LLM_API_KEY") or "").strip() or None
+    pixabay_key = (env.get("PIXABAY_API_KEY") or "").strip() or None
     pexels_key = (env.get("PEXELS_API_KEY") or "").strip() or None
 
-    secrets = {"gemini_api_key": gemini_key, "fallback_api_key": fallback_key, "pexels_api_key": pexels_key}
+    secrets = {"gemini_api_key": gemini_key, "fallback_api_key": fallback_key, "pixabay_api_key": pixabay_key,
+               "pexels_api_key": pexels_key}
     try:
         settings = Settings(**{**raw, **secrets})
     except ValidationError as exc:

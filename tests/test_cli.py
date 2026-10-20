@@ -40,12 +40,15 @@ def test_cli_missing_key_is_friendly(tmp_path, capsys, monkeypatch):
 
 def test_check_setup_reports_each_check(tmp_path, capsys, monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.chdir(tmp_path)  # not the owner's real .env, which may hold stock video keys
+    for name in ("PIXABAY_API_KEY", "PEXELS_API_KEY", "FALLBACK_LLM_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(cli, "probe_gemini", lambda settings: (False, "User location is not supported"))
     code = cli.main(["check-setup", "--config", str(write_config(tmp_path))])
     out = capsys.readouterr().out
     assert code == 1
     assert "ffmpeg" in out and "font" in out.lower() and "location is not supported" in out
-    assert "! stock video key (PEXELS_API_KEY)" in out
+    assert "! stock video key (PIXABAY_API_KEY or PEXELS_API_KEY)" in out
 
 
 # --- automatic mode -------------------------------------------------------------------------

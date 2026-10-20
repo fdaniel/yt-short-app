@@ -42,9 +42,16 @@ def test_unexpected_errors_are_not_swallowed():
 
 
 def test_build_llm_without_fallback_key(settings):
-    assert [p.name for p in build_llm(settings, httpx.Client()).providers] == ["gemini"]
+    # the lighter Gemini model runs on the same free key and is often free when the main one is busy
+    assert [p.name for p in build_llm(settings, httpx.Client()).providers] == ["gemini", "gemini-lite"]
 
 
 def test_build_llm_with_fallback_key(settings):
     s = settings.model_copy(update={"fallback_api_key": "f"})
-    assert [p.name for p in build_llm(s, httpx.Client()).providers] == ["gemini", "fallback-openai-compat"]
+    names = [p.name for p in build_llm(s, httpx.Client()).providers]
+    assert names == ["gemini", "gemini-lite", "fallback-openai-compat"]
+
+
+def test_backup_gemini_model_can_be_turned_off(settings):
+    s = settings.model_copy(update={"llm": settings.llm.model_copy(update={"gemini_backup_model": None})})
+    assert [p.name for p in build_llm(s, httpx.Client()).providers] == ["gemini"]

@@ -5,6 +5,7 @@ font_file: /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf
 
 llm:
   gemini_model: gemini-flash-latest
+  gemini_backup_model: gemini-flash-lite-latest  # same free key, used when the main model is busy
   fallback_base_url: https://api.groq.com/openai/v1
   fallback_model: llama-3.3-70b-versatile
 

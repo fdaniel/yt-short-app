@@ -101,7 +101,7 @@ def test_e2e_no_footage_at_all_is_refused(settings, conn):
     respx.get(NEWS).respond(200, text=(FIXTURES / "article_nvidia.html").read_text())
     respx.get(url__startswith="https://store.steampowered.com/api/appdetails").respond(503)
     deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
-    with pytest.raises(PipelineError, match="no footage.*PEXELS_API_KEY"):
+    with pytest.raises(PipelineError, match="no footage.*PIXABAY_API_KEY"):
         make_video(NEWS, 999, VideoFormat.NEWS_FLASH, settings, deps, conn)
     assert VideoRepository(conn).get(1).status == VideoStatus.FAILED
     assert not (settings.data_dir / "exports").exists()
@@ -209,13 +209,63 @@ def test_e2e_broken_stock_clip_is_skipped(pexels_settings, conn, synthetic_video
     from shorts.media.shots import detect_shots as real
 
     def _detect(path, asset_id, **kwargs):
-        if path.name == "stock_101.mp4":
+        if path.name == "stock_pexels_101.mp4":
             raise FFmpegError("ffprobe failed")
         return real(path, asset_id, **kwargs)
 
     monkeypatch.setattr("shorts.pipeline.detect_shots", _detect)
     deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
     assert make_video(NEWS, None, VideoFormat.NEWS_FLASH, pexels_settings, deps, conn).video_path.exists()
+
+
+def mock_pixabay(synthetic_video, payload=None):
+    payload = payload or json.loads((FIXTURES / "pixabay_search.json").read_text())
+    route = respx.get(url__startswith="https://pixabay.com/api/videos/").respond(200, json=payload)
+    respx.get(url__startswith="https://cdn.pixabay.com/").respond(200, content=synthetic_video.read_bytes())
+    return route
+
+
+@respx.mock
+def test_e2e_hardware_story_gets_pixabay_footage(settings, conn, synthetic_video):
+    respx.get(NEWS).respond(200, text=(FIXTURES / "article_nvidia.html").read_text())
+    search = mock_pixabay(synthetic_video)
+    deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
+    r = make_video(NEWS, None, VideoFormat.NEWS_FLASH, settings.model_copy(update={"pixabay_api_key": "xk"}), deps,
+                   conn)
+    assert search.called
+    assets = AssetRepository(conn).list_for_video(r.video_id)
+    assert {a.source_platform for a in assets if a.kind == AssetKind.STOCK_VIDEO} == {"pixabay"}
+    meta = json.loads(r.metadata_path.read_text())
+    assert "via Pixabay (https://pixabay.com/videos/laptop-keyboard-201/)" in meta["description"]
+
+
+@respx.mock
+def test_e2e_pexels_fills_in_when_pixabay_finds_nothing(pexels_settings, conn, synthetic_video):
+    respx.get(NEWS).respond(200, text=(FIXTURES / "article_nvidia.html").read_text())
+    mock_pixabay(synthetic_video, payload={"hits": []})
+    mock_pexels(synthetic_video)
+    deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
+    both = pexels_settings.model_copy(update={"pixabay_api_key": "xk"})
+    r = make_video(NEWS, None, VideoFormat.NEWS_FLASH, both, deps, conn)
+    assets = AssetRepository(conn).list_for_video(r.video_id)
+    assert {a.source_platform for a in assets if a.kind == AssetKind.STOCK_VIDEO} == {"pexels"}
+
+
+@respx.mock
+def test_e2e_pexels_tops_up_when_pixabay_has_too_few(pexels_settings, conn, synthetic_video):
+    respx.get(NEWS).respond(200, text=(FIXTURES / "article_nvidia.html").read_text())
+    one_clip = json.loads((FIXTURES / "pixabay_search.json").read_text())
+    one_clip["hits"] = one_clip["hits"][:1]
+    mock_pixabay(synthetic_video, payload=one_clip)
+    mock_pexels(synthetic_video)
+    deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
+    both = pexels_settings.model_copy(update={"pixabay_api_key": "xk"})
+    r = make_video(NEWS, None, VideoFormat.NEWS_FLASH, both, deps, conn)
+    platforms = [a.source_platform for a in AssetRepository(conn).list_for_video(r.video_id)
+                 if a.kind == AssetKind.STOCK_VIDEO]
+    assert platforms.count("pixabay") == 1 and platforms.count("pexels") == 2
+    meta = json.loads(r.metadata_path.read_text())
+    assert "via Pixabay" in meta["description"] and "via Pexels" in meta["description"]
 
 
 @respx.mock

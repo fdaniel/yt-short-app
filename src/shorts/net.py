@@ -1,6 +1,8 @@
 """HTTP helpers with URL safety checks and hard size limits."""
 
 import ipaddress
+import logging
+import re
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -10,6 +12,22 @@ from shorts.config import Settings
 
 USER_AGENT = "tech-shorts/0.1 (personal news tool)"
 _CHUNK = 64 * 1024
+_SECRET_PARAM = re.compile(r"\b((?:api_)?key)=[^&\s'\"]+", re.IGNORECASE)
+
+
+def redact(text: str) -> str:
+    """Hide API keys carried in addresses (Pixabay takes its key as ?key=...)."""
+    return _SECRET_PARAM.sub(r"\1=***", text)
+
+
+class _RedactKeys(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg, record.args = redact(record.getMessage()), None
+        return True
+
+
+# httpx logs every request address at INFO, and the automatic runs write INFO to a log file
+logging.getLogger("httpx").addFilter(_RedactKeys())
 
 
 class UnsafeURLError(ValueError):
@@ -55,6 +73,8 @@ def _fetch(
 ) -> tuple[bytes, str | None]:
     validate_public_url(url)
     with client.stream("GET", url, headers=headers) as response:
+        if response.is_error:
+            response.read()  # error pages are small, and callers may need to read why the request was refused
         response.raise_for_status()
         body = bytearray()
         for chunk in response.iter_bytes(_CHUNK):

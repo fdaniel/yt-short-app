@@ -23,13 +23,14 @@ from shorts.media.timeline import Card, plan_timeline, usable_trailer_shots
 from shorts.metadata import build_metadata, content_hash, write_metadata
 from shorts.models import Asset, AssetKind, RightsBasis, VideoFormat, VideoStatus
 from shorts.music import pick_music
-from shorts.net import DownloadTooLarge, UnsafeURLError
+from shorts.net import DownloadTooLarge, UnsafeURLError, redact
 from shorts.rights import RightsError, assert_usable
 from shorts.script.checks import narration_lines
 from shorts.script.schema import ScriptDraft
 from shorts.script.writer import write_checked_script
+from shorts.sources import pexels, pixabay
 from shorts.sources.article import Article, fetch_article
-from shorts.sources.pexels import collect_stock_assets
+from shorts.sources.stock import MAX_CLIPS, StockSource, collect_stock_assets
 from shorts.sources.steam import SteamError, collect_steam_assets, fetch_steam_app
 from shorts.text import clean_text
 from shorts.storage.repositories import AssetRepository, BlocklistRepository, VideoRepository
@@ -164,23 +165,31 @@ def _steam_assets(job: _Job, blocked: set[str]) -> list[Asset]:
         return []
 
 
+def _stock_sources(settings: Settings) -> list[tuple[StockSource, str]]:
+    keyed = [(pixabay.SOURCE, settings.pixabay_api_key), (pexels.SOURCE, settings.pexels_api_key)]
+    return [(source, key) for source, key in keyed if key]
+
+
 def _stock_assets(draft: ScriptDraft, job: _Job) -> list[Asset]:
-    """Licensed stock video (Pexels), when a key is set."""
-    key = job.settings.pexels_api_key
-    if not key:
-        return []
+    """Licensed stock video from each site with a key, in turn, until there are enough clips."""
     queries = draft.footage_queries or list(DEFAULT_FOOTAGE_QUERIES)
-    try:
-        return collect_stock_assets(job.deps.http, key, queries, job.work / "stock", job.settings)
-    except _STOCK_ERRORS as exc:
-        log.warning("Stock footage unavailable: %s", exc)
-        return []
+    assets: list[Asset] = []
+    for source, key in _stock_sources(job.settings):
+        if len(assets) >= MAX_CLIPS:
+            break
+        try:
+            assets += collect_stock_assets(source, job.deps.http, key, queries, job.work / "stock", job.settings,
+                                           wanted=MAX_CLIPS - len(assets))
+        except _STOCK_ERRORS as exc:
+            log.warning("%s stock footage unavailable: %s", source.name, redact(str(exc)))
+    return assets
 
 
 def _no_footage_reason(settings: Settings) -> str:
-    if settings.pexels_api_key:
-        return "no footage for this story: no game trailer or screenshots, and Pexels had no usable stock video"
-    return "no footage for this story: no game trailer or screenshots (add PEXELS_API_KEY to .env for stock video)"
+    sites = " or ".join(source.name for source, _ in _stock_sources(settings))
+    if sites:
+        return f"no footage for this story: no game trailer or screenshots, and {sites} had no usable stock video"
+    return "no footage for this story: no game trailer or screenshots (add PIXABAY_API_KEY to .env for stock video)"
 
 
 def _overlay_path(card: Path) -> Path:
@@ -289,5 +298,5 @@ def _stock_shots(assets: list[Asset], length: float) -> list[Shot]:
 def _credit(assets: list[Asset], article: Article) -> str:
     steam = next((a for a in assets if a.kind in (AssetKind.TRAILER, AssetKind.SCREENSHOT)), None)
     owners = [f"{steam.rightsholder} / Steam"] if steam else []
-    owners += ["Pexels"] if any(a.kind == AssetKind.STOCK_VIDEO for a in assets) else []
+    owners += list(dict.fromkeys(a.source_platform.capitalize() for a in assets if a.kind == AssetKind.STOCK_VIDEO))
     return f"Footage: {', '.join(owners)}" if owners else f"Source: {article.domain}"

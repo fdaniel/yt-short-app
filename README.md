@@ -7,7 +7,7 @@ Makes short vertical videos (YouTube Shorts) about tech and gaming news, automat
 3. reads it with a free, local AI voice (Kokoro), taking turns video by video between a female and a male voice
    (`voice.voices` in `config.yaml`), and saying tech words the way people do ("ASUS" as a word, "128GB" as
    "128 gigabytes"; the captions keep the normal spelling),
-4. builds a 1080×1920 video from **short Steam trailer excerpts** (≤ 4 s each, under half the video, trailer sound removed), store screenshots, free **Pexels stock video** (for tech news with no game footage) and its own spec cards shown over the footage,
+4. builds a 1080×1920 video from **short Steam trailer excerpts** (≤ 4 s each, under half the video, trailer sound removed), store screenshots, free **Pixabay / Pexels stock video** (for tech news with no game footage) and its own spec cards shown over the footage,
 5. adds captions, an on-screen credit, and licensed background music,
 6. saves `video.mp4` + `metadata.json` (title, description with source and footage credits, hashtags, licence log) for you to review.
 
@@ -43,11 +43,15 @@ cp config.example.yaml config.yaml
 
 - `GEMINI_API_KEY`: https://aistudio.google.com → **Get API key**.
 - `FALLBACK_LLM_API_KEY` (optional, used when Gemini's free quota runs out): a free key from https://console.groq.com.
-- `PEXELS_API_KEY` (optional, strongly recommended): free stock video for tech news, which has no game trailer.
-  Sign up at https://www.pexels.com/join/, then open https://www.pexels.com/api/ → **Get Started** and copy the key.
-  The Pexels License allows free commercial use; each clip's filmmaker is credited in the video description.
+- `PIXABAY_API_KEY` (optional, strongly recommended): free stock video for tech news, which has no game trailer.
+  Sign up at https://pixabay.com, then open https://pixabay.com/api/docs/ while logged in: the key is shown
+  under **Parameters → key**. The Pixabay Content License allows free commercial use; each clip's creator is
+  credited in the video description. Searches are kept for 24 hours, as Pixabay asks, and the key is hidden from logs.
+- `PEXELS_API_KEY` (optional): a second stock video site, used when Pixabay has too few clips.
+  Pexels paused new keys in September 2026; a key you already have still works.
+
   The clips are generic (a laptop, a chip), never the announced product itself.
-  Without this key, a story with no game trailer or screenshots is **skipped**: a Short made only of text does badly.
+  Without either key, a story with no game trailer or screenshots is **skipped**: a Short made only of text does badly.
 
 ### Music (optional)
 
@@ -65,7 +69,7 @@ python -m shorts check-setup
 ## Make a video
 
 ```bash
-# hardware news: Pexels stock video + spec cards (needs PEXELS_API_KEY)
+# hardware news: stock video + spec cards (needs PIXABAY_API_KEY or PEXELS_API_KEY)
 python -m shorts make-video --news-url "https://nvidianews.nvidia.com/news/..."
 
 # game news: add the game's Steam app ID (the number in its store URL)

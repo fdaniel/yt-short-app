@@ -79,7 +79,7 @@ def _make_video(args: argparse.Namespace, settings: Settings) -> int:
 
 def probe_gemini(settings: Settings) -> tuple[bool, str]:
     try:
-        GeminiProvider(settings.gemini_api_key, settings.llm.gemini_model).generate_json(
+        GeminiProvider(settings.gemini_api_key, settings.llm.gemini_model, busy_waits_s=()).generate_json(
             'Reply with the JSON {"ok": true}.', _Ping
         )
     except (ProviderUnavailable, InvalidOutput) as exc:
@@ -114,8 +114,8 @@ def _checks(settings: Settings) -> list[tuple[str, bool, str]]:
         ("critical", *probe_gemini(settings)),
         ("critical", importlib.util.find_spec("kokoro") is not None, "Kokoro voice installed"),
         ("warning", settings.fallback_api_key is not None, "fallback AI key (FALLBACK_LLM_API_KEY)"),
-        ("warning", settings.pexels_api_key is not None,
-         "stock video key (PEXELS_API_KEY): without it, news with no game footage is skipped"),
+        ("warning", bool(settings.pixabay_api_key or settings.pexels_api_key),
+         "stock video key (PIXABAY_API_KEY or PEXELS_API_KEY): without it, news with no game footage is skipped"),
         ("warning", licensed > 0, f"{licensed} licensed music track(s) in {settings.music_dir}"),
         ("warning", *_free_space(settings)),
     ]

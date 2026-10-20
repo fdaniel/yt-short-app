@@ -68,6 +68,13 @@ def test_pexels_key_is_optional_and_read_from_env(tmp_path):
     assert load_settings(cfg, {"GEMINI_API_KEY": "k", "PEXELS_API_KEY": " p "}).pexels_api_key == "p"
 
 
+def test_pixabay_key_is_optional_and_read_from_env(tmp_path):
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text("")
+    assert load_settings(cfg, {"GEMINI_API_KEY": "k"}).pixabay_api_key is None
+    assert load_settings(cfg, {"GEMINI_API_KEY": "k", "PIXABAY_API_KEY": " x\r"}).pixabay_api_key == "x"
+
+
 
 def test_videos_alternate_a_female_and_a_male_voice_by_default(tmp_path):
     cfg = tmp_path / "c.yaml"

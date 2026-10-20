@@ -1,0 +1,25 @@
+{
+  "total": 3, "totalHits": 3,
+  "hits": [
+    {"id": 201, "pageURL": "https://pixabay.com/videos/laptop-keyboard-201/", "type": "film", "tags": "laptop, keyboard",
+     "duration": 15, "user_id": 1, "user": "Carla Reis",
+     "videos": {
+       "large": {"url": "https://cdn.pixabay.com/video/2025/01/01/201-large.mp4", "width": 3840, "height": 2160, "size": 90000000},
+       "medium": {"url": "https://cdn.pixabay.com/video/2025/01/01/201-medium.mp4", "width": 1920, "height": 1080, "size": 20000000},
+       "small": {"url": "https://cdn.pixabay.com/video/2025/01/01/201-small.mp4", "width": 1280, "height": 720, "size": 9000000},
+       "tiny": {"url": "https://cdn.pixabay.com/video/2025/01/01/201-tiny.mp4", "width": 960, "height": 540, "size": 4000000}
+     }},
+    {"id": 202, "pageURL": "https://pixabay.com/videos/chip-202/", "type": "film", "tags": "chip",
+     "duration": 3, "user_id": 2, "user": "Too Short",
+     "videos": {
+       "large": {"url": "https://cdn.pixabay.com/video/2025/01/01/202-large.mp4", "width": 1920, "height": 1080, "size": 5000000}
+     }},
+    {"id": 203, "pageURL": "https://pixabay.com/videos/desk-setup-203/", "type": "film", "tags": "desk",
+     "duration": 20, "user_id": 3, "user": "Dan Moss",
+     "videos": {
+       "large": {"url": "", "width": 0, "height": 0, "size": 0},
+       "medium": {"url": "https://cdn.pixabay.com/video/2025/01/01/203-medium.mp4", "width": 1280, "height": 720, "size": 8000000},
+       "small": {"url": "https://cdn.pixabay.com/video/2025/01/01/203-small.mp4", "width": 960, "height": 540, "size": 3000000}
+     }}
+  ]
+}

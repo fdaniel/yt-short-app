@@ -7,8 +7,9 @@ import pytest
 import respx
 
 from shorts.models import AssetKind, RightsBasis
-from shorts.sources import pexels
-from shorts.sources.pexels import SEARCH_URL, collect_stock_assets, parse_search
+from shorts.sources import stock
+from shorts.sources.pexels import SEARCH_URL, SOURCE, parse_search
+from shorts.sources.stock import collect_stock_assets
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
 PAYLOAD = json.loads((FIXTURES / "pexels_search.json").read_text())
@@ -33,13 +34,13 @@ def fake_download(monkeypatch, synthetic_video):
         shutil.copy(synthetic_video, dest)
         return dest
 
-    monkeypatch.setattr(pexels, "download_file", _copy)
+    monkeypatch.setattr(stock, "download_file", _copy)
 
 
 @respx.mock
 def test_collect_logs_the_licence_and_strips_audio(tmp_path, settings, fake_download):
     route = respx.get(url__startswith=SEARCH_URL).respond(200, json=PAYLOAD)
-    assets = collect_stock_assets(httpx.Client(), "key-123", ["gaming laptop"], tmp_path, settings)
+    assets = collect_stock_assets(SOURCE, httpx.Client(), "key-123", ["gaming laptop"], tmp_path, settings)
     request = route.calls.last.request
     assert request.headers["Authorization"] == "key-123"
     assert request.url.params["query"] == "gaming laptop" and request.url.params["orientation"] == "portrait"
@@ -57,7 +58,7 @@ def test_collect_logs_the_licence_and_strips_audio(tmp_path, settings, fake_down
 @respx.mock
 def test_same_clip_is_not_downloaded_twice(tmp_path, settings, fake_download):
     respx.get(url__startswith=SEARCH_URL).respond(200, json=PAYLOAD)
-    assets = collect_stock_assets(httpx.Client(), "k", ["laptop", "desk"], tmp_path, settings)
+    assets = collect_stock_assets(SOURCE, httpx.Client(), "k", ["laptop", "desk"], tmp_path, settings)
     assert len({a.source_url for a in assets}) == len(assets) == 2
 
 
@@ -66,22 +67,22 @@ def test_at_most_max_clips(tmp_path, settings, fake_download, monkeypatch):
     many = {"videos": [{**PAYLOAD["videos"][0], "id": i, "url": f"https://www.pexels.com/video/{i}/"}
                        for i in range(10)]}
     respx.get(url__startswith=SEARCH_URL).respond(200, json=many)
-    assets = collect_stock_assets(httpx.Client(), "k", ["a", "b", "c"], tmp_path, settings)
-    assert len(assets) == pexels.MAX_CLIPS
+    assets = collect_stock_assets(SOURCE, httpx.Client(), "k", ["a", "b", "c"], tmp_path, settings)
+    assert len(assets) == stock.MAX_CLIPS
 
 
 @respx.mock
 def test_refused_key_means_no_stock_footage(tmp_path, settings, caplog):
     respx.get(url__startswith=SEARCH_URL).respond(401, json={"error": "bad key"})
-    assert collect_stock_assets(httpx.Client(), "bad", ["laptop"], tmp_path, settings) == []
+    assert collect_stock_assets(SOURCE, httpx.Client(), "bad", ["laptop"], tmp_path, settings) == []
     assert "PEXELS_API_KEY" in caplog.text
 
 
 @respx.mock
 def test_broken_download_is_skipped(tmp_path, settings, monkeypatch):
     respx.get(url__startswith=SEARCH_URL).respond(200, json=PAYLOAD)
-    monkeypatch.setattr(pexels, "download_file", lambda *a, **k: (_ for _ in ()).throw(httpx.ReadTimeout("slow")))
-    assert collect_stock_assets(httpx.Client(), "k", ["laptop"], tmp_path, settings) == []
+    monkeypatch.setattr(stock, "download_file", lambda *a, **k: (_ for _ in ()).throw(httpx.ReadTimeout("slow")))
+    assert collect_stock_assets(SOURCE, httpx.Client(), "k", ["laptop"], tmp_path, settings) == []
 
 
 def _video(**overrides):
@@ -120,5 +121,5 @@ def test_failed_download_tries_the_next_result(tmp_path, settings, monkeypatch, 
         shutil.copy(synthetic_video, dest)
         return dest
 
-    monkeypatch.setattr(pexels, "download_file", _flaky)
-    assert len(collect_stock_assets(httpx.Client(), "k", ["laptop"], tmp_path, settings)) == pexels.MAX_PER_QUERY
+    monkeypatch.setattr(stock, "download_file", _flaky)
+    assert len(collect_stock_assets(SOURCE, httpx.Client(), "k", ["laptop"], tmp_path, settings)) == stock.MAX_PER_QUERY
