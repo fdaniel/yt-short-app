@@ -117,7 +117,8 @@ def test_request_log_never_shows_the_key(caplog):
     assert "SECRET-KEY-42" not in caplog.text
 
 
-def test_key_hiding_never_breaks_a_badly_formatted_log_line():
+def test_key_hiding_never_breaks_a_badly_formatted_log_line(caplog):
     import logging
 
+    caplog.set_level(logging.INFO, logger="httpx")
     logging.getLogger("httpx").info("bad %s %s", 1)  # logging reports the mistake itself instead of raising

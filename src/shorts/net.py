@@ -22,7 +22,10 @@ def redact(text: str) -> str:
 
 class _RedactKeys(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        record.msg, record.args = redact(record.getMessage()), None
+        try:
+            record.msg, record.args = redact(record.getMessage()), None
+        except (TypeError, ValueError):
+            record.msg, record.args = redact(str(record.msg)), None  # a broken log line must not break the request
         return True
 
 
