@@ -28,7 +28,7 @@ def test_view_groups_videos_by_tab(settings, make_ready_video):
     card = view.cards[0]
     assert card.meta["title"] == "A" and card.has_file
     assert (card.score, card.explanation, card.source) == (0.81, "fresh, 2 sources", "NVIDIA Newsroom")
-    assert view.made_today == 2 and view.daily_limit == 3 and view.channel.title == "Tech Bits"
+    assert view.made_today == 2 and view.daily_limit == settings.discovery.max_videos_per_day and view.channel.title == "Tech Bits"
 
 
 def test_view_survives_broken_metadata(settings, make_ready_video):

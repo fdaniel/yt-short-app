@@ -47,7 +47,7 @@ def test_tabs_show_counts_and_published_link(settings, make_ready_video):
 def test_notice_and_daily_count(settings, make_ready_video):
     make_ready_video()
     html = _html(settings, notice="Video #1 discarded.")
-    assert "Video #1 discarded." in html and "1 of 3" in html
+    assert "Video #1 discarded." in html and f"1 of {settings.discovery.max_videos_per_day}" in html
 
 
 def test_empty_tab_says_so(settings):
