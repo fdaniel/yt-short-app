@@ -15,7 +15,7 @@ SEARCH_URL = "https://pixabay.com/api/videos/"
 LICENCE_TERMS = ("Pixabay Content License https://pixabay.com/service/license-summary/ "
                  "(free commercial use, credit given in description)")
 SEARCH_MAX_BYTES = 2_000_000
-PER_PAGE = 10
+PER_PAGE = 20  # enough choice to skip clips used in earlier videos
 MAX_QUERY_CHARS = 100
 PAGE_PREFIX = "https://pixabay.com/"
 FILE_HOST = "cdn.pixabay.com"

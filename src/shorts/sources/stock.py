@@ -128,9 +128,12 @@ def _download(source: StockSource, clip: StockClip, client: httpx.Client, work_d
 
 def collect_stock_assets(
     source: StockSource, client: httpx.Client, api_key: str, queries: list[str], work_dir: Path,
-    settings: Settings, *, wanted: int = MAX_CLIPS,
+    settings: Settings, *, wanted: int = MAX_CLIPS, used: frozenset[str] = frozenset(),
 ) -> list[Asset]:
-    """Up to `wanted` clips (at most MAX_PER_QUERY per search term, no repeats), audio removed."""
+    """Up to `wanted` clips (at most MAX_PER_QUERY per search term, no repeats), audio removed.
+
+    Clips whose page is in `used` (shown in earlier videos) are taken only when a search finds nothing new.
+    """
     work_dir.mkdir(parents=True, exist_ok=True)
     assets: list[Asset] = []
     seen: set[int] = set()
@@ -151,8 +154,9 @@ def collect_stock_assets(
         except _SEARCH_ERRORS as exc:
             log.warning("%s search for %r failed: %s", source.name, query, redact(str(exc)))
             continue
-        assets += _download_some(source, found, seen, min(MAX_PER_QUERY, wanted - len(assets)), client, work_dir,
-                                 settings)
+        fresh_first = sorted(found, key=lambda clip: clip.page_url in used)  # stable: keeps the site's order
+        assets += _download_some(source, fresh_first, seen, min(MAX_PER_QUERY, wanted - len(assets)), client,
+                                 work_dir, settings)
     return assets
 
 

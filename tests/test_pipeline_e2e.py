@@ -1,5 +1,6 @@
 import io
 import json
+import shutil
 from pathlib import Path
 
 import httpx
@@ -237,6 +238,30 @@ def test_e2e_hardware_story_gets_pixabay_footage(settings, conn, synthetic_video
     assert {a.source_platform for a in assets if a.kind == AssetKind.STOCK_VIDEO} == {"pixabay"}
     meta = json.loads(r.metadata_path.read_text())
     assert "via Pixabay (https://pixabay.com/videos/laptop-keyboard-201/)" in meta["description"]
+
+
+def _with_more_clips(count):
+    payload = json.loads((FIXTURES / "pixabay_search.json").read_text())
+    template = payload["hits"][0]
+    extra = [{**template, "id": 300 + n, "pageURL": f"https://pixabay.com/videos/server-{300 + n}/"} for n in range(count)]
+    return {**payload, "hits": payload["hits"] + extra}
+
+
+@respx.mock
+def test_e2e_next_video_skips_clips_already_used(settings, conn, synthetic_video):
+    respx.get(NEWS).respond(200, text=(FIXTURES / "article_nvidia.html").read_text())
+    keyed = settings.model_copy(update={"pixabay_api_key": "xk"})
+    mock_pixabay(synthetic_video)
+    first = make_video(NEWS, None, VideoFormat.NEWS_FLASH, keyed, PipelineDeps(
+        httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07)), conn)
+    shutil.rmtree(keyed.data_dir / "cache")  # the next story searches again and finds more clips
+    mock_pixabay(synthetic_video, payload=_with_more_clips(6))
+    second = make_video(NEWS, None, VideoFormat.NEWS_FLASH, keyed, PipelineDeps(
+        httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07)), conn)
+    repo = AssetRepository(conn)
+    used_first = {a.source_url for a in repo.list_for_video(first.video_id) if a.kind == AssetKind.STOCK_VIDEO}
+    used_second = {a.source_url for a in repo.list_for_video(second.video_id) if a.kind == AssetKind.STOCK_VIDEO}
+    assert used_first and used_second and not used_first & used_second
 
 
 @respx.mock

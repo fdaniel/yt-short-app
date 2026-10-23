@@ -171,6 +171,16 @@ class AssetRepository:
             )
         return replace(asset, id=int(cur.lastrowid))
 
+    def used_source_urls(self, kind: AssetKind) -> set[str]:
+        """Source pages of this kind in videos that are, or may still become, public."""
+        never_public = (VideoStatus.FAILED, VideoStatus.DISCARDED, VideoStatus.EXPIRED)
+        rows = self._conn.execute(
+            "SELECT DISTINCT a.source_url FROM assets a JOIN videos v ON v.id = a.video_id"
+            " WHERE a.kind = ? AND v.status NOT IN (?, ?, ?)",
+            (kind.value, *(status.value for status in never_public)),
+        ).fetchall()
+        return {row[0] for row in rows}
+
     def list_for_video(self, video_id: int) -> list[Asset]:
         rows = self._conn.execute(
             "SELECT * FROM assets WHERE video_id = ? ORDER BY id", (video_id,)

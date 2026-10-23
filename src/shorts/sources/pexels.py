@@ -13,7 +13,7 @@ from shorts.sources.stock import StockClip, StockSource, fits, sharpest, trusted
 SEARCH_URL = "https://api.pexels.com/videos/search"
 LICENCE_TERMS = "Pexels License https://www.pexels.com/license/ (free commercial use, credit given in description)"
 SEARCH_MAX_BYTES = 2_000_000
-PER_PAGE = 10
+PER_PAGE = 20  # enough choice to skip clips used in earlier videos
 PAGE_PREFIX = "https://www.pexels.com/"
 FILE_HOSTS = ("videos.pexels.com", "player.vimeo.com")
 

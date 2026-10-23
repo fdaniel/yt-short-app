@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from shorts.models import VideoFormat, VideoStatus
+from shorts.models import AssetKind, VideoFormat, VideoStatus
 from shorts.storage.db import MIGRATIONS, connect
 from shorts.storage.repositories import (
     AssetRepository,
@@ -137,3 +137,16 @@ def test_uploading_can_publish_go_back_or_discard(conn):
     repo.set_status(c, VideoStatus.DISCARDED)
     assert [repo.get(v).status for v in (a, b, c)] == [VideoStatus.APPROVED, VideoStatus.AWAITING_APPROVAL,
                                                        VideoStatus.DISCARDED]
+
+
+def test_used_source_urls_only_counts_videos_that_may_go_public(conn, make_asset):
+    repo, assets = VideoRepository(conn), AssetRepository(conn)
+    kept, failed = repo.create("https://a.com", None, VideoFormat.NEWS_FLASH), repo.create("https://b.com", None,
+                                                                                          VideoFormat.NEWS_FLASH)
+    for vid, url in ((kept, "https://pixabay.com/videos/id-1/"), (failed, "https://pixabay.com/videos/id-2/")):
+        assets.add(make_asset(kind=AssetKind.STOCK_VIDEO, source_url=url), vid)
+    assets.add(make_asset(source_url="https://cdn.example.com/shot.jpg"), kept)
+    for status in (VideoStatus.FACT_CHECKED, VideoStatus.RENDERING, VideoStatus.AWAITING_APPROVAL):
+        repo.set_status(kept, status)
+    repo.set_status(failed, VideoStatus.FAILED, "boom")
+    assert assets.used_source_urls(AssetKind.STOCK_VIDEO) == {"https://pixabay.com/videos/id-1/"}

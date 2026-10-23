@@ -8,7 +8,7 @@ import httpx
 import pytest
 import respx
 
-from shorts.sources import stock
+from shorts.sources import pexels, pixabay, stock
 from shorts.sources.pixabay import SEARCH_URL, SOURCE
 from shorts.sources.stock import CACHE_TTL_S, collect_stock_assets
 
@@ -84,3 +84,23 @@ def test_rate_limit_stops_asking_that_site(tmp_path, settings, caplog):
     route = respx.get(url__startswith=SEARCH_URL).respond(429, text="API rate limit exceeded.")
     assert collect_stock_assets(SOURCE, httpx.Client(), "k", ["laptop", "desk", "chip"], tmp_path, settings) == []
     assert route.call_count == 1 and "429" in caplog.text
+
+
+@respx.mock
+def test_clips_used_in_earlier_videos_come_last(tmp_path, settings, fake_download):
+    respx.get(url__startswith=SEARCH_URL).respond(200, json=PAYLOAD)
+    used = frozenset({"https://pixabay.com/videos/laptop-keyboard-201/"})
+    assets = collect_stock_assets(SOURCE, httpx.Client(), "k", ["laptop"], tmp_path, settings, wanted=1, used=used)
+    assert [a.source_url for a in assets] == ["https://pixabay.com/videos/desk-setup-203/"]
+
+
+@respx.mock
+def test_a_used_clip_is_still_taken_when_nothing_new_is_found(tmp_path, settings, fake_download):
+    respx.get(url__startswith=SEARCH_URL).respond(200, json=PAYLOAD)
+    used = frozenset({"https://pixabay.com/videos/laptop-keyboard-201/", "https://pixabay.com/videos/desk-setup-203/"})
+    assets = collect_stock_assets(SOURCE, httpx.Client(), "k", ["laptop"], tmp_path, settings, used=used)
+    assert len(assets) == 2
+
+
+def test_stock_searches_ask_for_enough_results_to_avoid_repeats():
+    assert pixabay.PER_PAGE >= 20 and pexels.PER_PAGE >= 20

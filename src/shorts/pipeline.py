@@ -173,13 +173,14 @@ def _stock_sources(settings: Settings) -> list[tuple[StockSource, str]]:
 def _stock_assets(draft: ScriptDraft, job: _Job) -> list[Asset]:
     """Licensed stock video from each site with a key, in turn, until there are enough clips."""
     queries = draft.footage_queries or list(DEFAULT_FOOTAGE_QUERIES)
+    used = frozenset(AssetRepository(job.conn).used_source_urls(AssetKind.STOCK_VIDEO))
     assets: list[Asset] = []
     for source, key in _stock_sources(job.settings):
         if len(assets) >= MAX_CLIPS:
             break
         try:
             assets += collect_stock_assets(source, job.deps.http, key, queries, job.work / "stock", job.settings,
-                                           wanted=MAX_CLIPS - len(assets))
+                                           wanted=MAX_CLIPS - len(assets), used=used)
         except _STOCK_ERRORS as exc:
             log.warning("%s stock footage unavailable: %s", source.name, redact(str(exc)))
     return assets
