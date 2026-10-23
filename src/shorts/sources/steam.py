@@ -176,4 +176,4 @@ def find_steam_app_id(client: httpx.Client, game_title: str) -> int | None:
     # "Modern Warfare 4" for "Call of Duty: Modern Warfare 4": only Steam's top result may match this way;
     # "Black Ops" would otherwise find the 2010 game for a Black Ops 7 story
     subtitle = [app_id for app_id, name in apps if ":" in name and normalise_title(name.split(":", 1)[1]) == wanted]
-    return subtitle[0] if subtitle == [apps[0][0]] else None
+    return subtitle[0] if apps and subtitle == [apps[0][0]] else None

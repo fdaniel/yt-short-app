@@ -178,3 +178,10 @@ def test_series_match_only_for_top_result():
         {"type": "app", "name": "Call of Duty\u00ae: Black Ops 7", "id": 3606480},
     ]})
     assert steam.find_steam_app_id(httpx.Client(), "Black Ops") is None
+
+
+@respx.mock
+def test_game_not_on_steam_returns_none():
+    # e.g. a Nintendo-only game: Steam finds nothing at all
+    respx.get(url__startswith=SEARCH).respond(200, json={"total": 0, "items": []})
+    assert steam.find_steam_app_id(httpx.Client(), "Pokémon Champions") is None
