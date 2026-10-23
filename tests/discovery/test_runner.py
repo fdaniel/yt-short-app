@@ -249,3 +249,21 @@ def test_game_named_only_in_the_feed_summary_gets_steam_id(cfg, conn):
     make = FakeMake(conn)
     run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game="Modern Warfare 4")])]), make)
     assert make.calls[0][1] == 4435490
+
+
+@respx.mock
+def test_press_release_titled_with_the_game_name_gets_steam_id(cfg, conn):
+    # GamesPress titles each release with just the game's name; the AI may not repeat it
+    story = ("Call of Duty®: Modern Warfare® 4", "https://news.xbox.com/en-us/pr/", "Sun, 18 Oct 2026 08:00:00 +0000")
+    mock_feeds(hw=[], games=[story])
+    make = FakeMake(conn)
+    run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game=None)])]), make)
+    assert make.calls[0][1] == 4435490
+
+
+@respx.mock
+def test_headline_is_not_taken_for_a_game_name(cfg, conn):
+    mock_feeds(hw=[], games=GAME_ITEMS)  # "Modern Warfare 4 launches October 23"
+    make = FakeMake(conn)
+    run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game=None)])]), make)
+    assert make.calls[0][1] is None

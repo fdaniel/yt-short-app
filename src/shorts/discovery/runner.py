@@ -99,7 +99,8 @@ def _mentions(it: FeedItem, game_title: str) -> bool:
 
 def _steam_id(it: FeedItem, game_title: str | None, deps: PipelineDeps) -> int | None:
     if not game_title:
-        return None
+        # press release feeds title a story with just the game's name: an exact store match is that game
+        return find_steam_app_id(deps.http, it.title) if it.topic == "gaming" else None
     if not _mentions(it, game_title):
         log.warning("AI named game %r but the story does not mention it; no footage", game_title)
         return None
