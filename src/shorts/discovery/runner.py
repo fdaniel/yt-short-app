@@ -12,7 +12,7 @@ from pathlib import Path
 
 from shorts.config import Settings
 from shorts.discovery.feeds import FeedItem, article_from_item, fetch_all
-from shorts.discovery.score import ScoredTopic, cheap_filter, coverage, score_topic
+from shorts.discovery.score import ScoredTopic, cheap_filter, coverage, fair_share, score_topic
 from shorts.discovery.triage import story_text, triage
 from shorts.llm.base import AllProvidersExhausted, InvalidOutput
 from shorts.models import TopicStatus
@@ -81,7 +81,7 @@ def _run(settings, deps, conn, now, free_bytes, make) -> RunReport:
     if not kept:
         return RunReport((), "nothing new", len(items))
     try:
-        ranked = _rank(kept[: d.triage_batch], items, recent, settings, deps, topics, now)
+        ranked = _rank(fair_share(kept, d.triage_batch), items, recent, settings, deps, topics, now)
     except (AllProvidersExhausted, InvalidOutput) as exc:
         log.warning("Rating stories failed: %s", exc)
         return RunReport((), AI_UNAVAILABLE, len(items))

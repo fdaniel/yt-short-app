@@ -11,8 +11,9 @@ from shorts.net import fetch_text
 
 MIN_TEXT_CHARS = 400
 MIN_PROSE_WORDS = 10
-# a sentence end: two lowercase letters or digits, then . or ?, then a space or the end of the line
-_SENTENCE_END = re.compile(r"[a-z0-9]{2}[.?][\"”’)]?(\s|$)")
+# a sentence end: two letters or digits ("PS5.", "4K.", "été."), then . or ?, then a space or the end of the line;
+# "!" is left out because headlines end with it ("Play Now!")
+_SENTENCE_END = re.compile(r"\w{2}[.?][\"”’)]?(\s|$)")
 
 
 class SourceTextError(Exception):

@@ -163,7 +163,8 @@ def test_nothing_good(cfg, conn):
 def test_failed_story_falls_through_to_next(cfg, conn):
     mock_feeds()
     make = FakeMake(conn, failures=[ValueError("script rejected"), None])
-    report = run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9), verdict(1, 3), verdict(2, 8)])]), make)
+    # the batch takes each feed in turn: [0] DLSS (NVIDIA), [1] MW4 (Xbox), [2] cars (NVIDIA)
+    report = run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9), verdict(1, 8), verdict(2, 3)])]), make)
     assert [c[0] for c in make.calls] == ["https://blogs.nvidia.com/blog/dlss-45/", "https://news.xbox.com/en-us/mw4/"]
     assert len(report.made) == 1
     status = dict(conn.execute("SELECT url, status FROM topics").fetchall())

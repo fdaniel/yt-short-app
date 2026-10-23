@@ -1,7 +1,7 @@
 import pytest
 
 from shorts.config import DiscoverySettings
-from shorts.discovery.score import cheap_filter, coverage, score_topic, similarity
+from shorts.discovery.score import cheap_filter, coverage, fair_share, score_topic, similarity
 from shorts.discovery.triage import Triage
 from shorts.models import VideoFormat
 from tests.discovery.items import NOW, item
@@ -77,3 +77,16 @@ def test_same_story_as_recent_scores_zero():
     t = score_topic(item("RTX Spark Ignites Global Celebration"), verdict(interest=9, same=True), footage=False,
                     coverage=1, settings=S, now=NOW)
     assert t.score == 0 and "already covered" in t.explanation
+
+
+def test_fair_share_gives_every_feed_a_turn():
+    flood = [item(f"Indie game {n}", source="GamesPress", topic="gaming", hours_old=n / 10) for n in range(20)]
+    older = item("Saros gets a release date", source="PlayStation Blog", topic="gaming", hours_old=5)
+    batch = fair_share([*flood, older], 4)
+    assert len(batch) == 4 and older in batch
+    assert [it.title for it in batch if it.source == "GamesPress"] == ["Indie game 0", "Indie game 1", "Indie game 2"]
+
+
+def test_fair_share_fills_up_from_the_busiest_feed():
+    items = [item("Only one", source="Xbox Wire"), *[item(f"Press {n}", source="GamesPress") for n in range(5)]]
+    assert len(fair_share(items, 4)) == 4 and len(fair_share(items, 10)) == 6

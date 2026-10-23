@@ -39,7 +39,9 @@ class TriageBatch(BaseModel):
 
 
 def excerpt(content_html: str) -> str:
-    text = html.unescape(re.sub(r"<[^>]+>", " ", content_html))
+    # decode first, so an escaped "&lt;/stories&gt;" in a feed is removed like a real tag instead of
+    # turning into one that closes the prompt's data block
+    text = re.sub(r"<[^>]*>?", " ", html.unescape(content_html)).replace("<", " ").replace(">", " ")
     return " ".join(text.split())[:EXCERPT_CHARS]
 
 

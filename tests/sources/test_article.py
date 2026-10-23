@@ -54,3 +54,13 @@ def test_short_paragraphs_add_up():
                          for n in range(1, 9))
     a = extract_article("https://example.com/news", f"<html><body><article>{paragraphs}</article></body></html>")
     assert "$599" in a.text
+
+
+def test_sentences_ending_in_a_name_or_number_count():
+    lines = ["The new handheld from the studio launches next week on PS5.",
+             "It also comes out on the same day for everyone on PC.",
+             "Owners of the newer console get a free upgrade to run it in 4K.",
+             "Preorders open today in every region where the console is sold, at no extra cost to anyone."]
+    paragraphs = "".join(f"<p>{line} Part {n} of the official announcement for {n}.</p>"
+                         for n, line in enumerate(lines * 2, 1))
+    assert extract_article("https://example.com/n", f"<html><body><article>{paragraphs}</article></body></html>")

@@ -82,7 +82,7 @@ DEFAULT_FEEDS = (
     FeedSource(name="AMD Press Releases", url="https://ir.amd.com/news-events/press-releases/rss", topic="hardware"),
     FeedSource(name="Xbox Wire", url="https://news.xbox.com/en-us/feed/", topic="gaming"),
     FeedSource(name="PlayStation Blog", url="https://blog.playstation.com/feed/", topic="gaming"),
-    FeedSource(name="Nintendo", url="https://www.nintendo.co.uk/news.xml", topic="gaming"),
+    FeedSource(name="Nintendo", url="https://www.nintendo.com/en-gb/news.xml", topic="gaming"),
     # publishers' own press releases, many a day: new games, release dates, trailers
     FeedSource(name="GamesPress", url="https://www.gamespress.com/en-US/News/RSS", topic="gaming"),
 )

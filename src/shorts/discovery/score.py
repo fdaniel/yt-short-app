@@ -1,6 +1,7 @@
 """Cheap filters and a transparent weighted score for candidate stories."""
 
 import re
+from itertools import zip_longest
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -62,6 +63,16 @@ def cheap_filter(
         else:
             kept.append(it)
     return kept, rejected
+
+
+def fair_share(items: list[FeedItem], size: int) -> list[FeedItem]:
+    """Up to `size` items taken from each feed in turn, each feed's freshest first, so one busy
+    feed (a press release site posts dozens a day) cannot crowd the others out of the AI's batch."""
+    queues: dict[str, list[FeedItem]] = {}
+    for it in sorted(items, key=lambda i: i.published, reverse=True):
+        queues.setdefault(it.source, []).append(it)
+    rounds = zip_longest(*queues.values())
+    return [it for round_ in rounds for it in round_ if it is not None][:size]
 
 
 def coverage(it: FeedItem, all_items: list[FeedItem], settings: DiscoverySettings) -> float:
