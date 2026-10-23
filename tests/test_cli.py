@@ -104,7 +104,7 @@ def test_schedule_help(tmp_path, capsys, monkeypatch):
     cfg = write_config(tmp_path)
     assert cli.main(["schedule-help", "--config", str(cfg)]) == 0
     out = capsys.readouterr().out
-    assert "schtasks /Create" in out and "/SC HOURLY /MO 3" in out and "-d Ubuntu-24.04" in out
+    assert "schtasks /Create" in out and "/SC HOURLY /MO 2" in out and "-d Ubuntu-24.04" in out
     assert f"--cd {tmp_path}" in out and "-m shorts run-once" in out and "schtasks /Delete" in out
 
 

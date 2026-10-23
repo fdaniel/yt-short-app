@@ -80,8 +80,11 @@ def test_default_feeds_in_settings(tmp_path):
     cfg = tmp_path / "config.yaml"
     cfg.write_text("")
     d = load_settings(cfg, {"GEMINI_API_KEY": "k"}).discovery
-    assert [f.name for f in d.feeds] == ["NVIDIA Newsroom", "NVIDIA Blog", "AMD Press Releases", "Xbox Wire", "PlayStation Blog"]
-    assert (d.max_videos_per_day, d.videos_per_run, d.max_age_h, d.min_free_gb) == (3, 1, 48, 10)
+    assert [f.name for f in d.feeds] == ["NVIDIA Newsroom", "NVIDIA Blog", "AMD Press Releases", "Xbox Wire",
+                                         "PlayStation Blog", "Nintendo", "GamesPress"]
+    assert {f.topic for f in d.feeds[3:]} == {"gaming"}
+    assert (d.max_videos_per_day, d.videos_per_run, d.max_attempts_per_run, d.triage_batch) == (6, 2, 4, 15)
+    assert (d.max_age_h, d.min_free_gb) == (48, 10)
     assert d.weights.interest == 0.5 and "board of directors" in d.exclude_keywords
 
 

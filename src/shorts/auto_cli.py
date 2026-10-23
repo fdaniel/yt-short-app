@@ -21,6 +21,7 @@ from shorts.voice.tts import KokoroTTS
 log = logging.getLogger(__name__)
 LOG_MAX_BYTES = 5 * 1024 * 1024
 TASK_NAME = "TechShorts"
+SCHEDULE_EVERY_H = 2
 DEFAULT_LOG = Settings.model_fields["data_dir"].default.expanduser() / "run.log"
 
 
@@ -91,8 +92,8 @@ def schedule_help(config_path: Path) -> int:
     distro = os.environ.get("WSL_DISTRO_NAME", "Ubuntu")
     repo = config_path.resolve().parent
     command = f"wsl.exe -d {distro} --cd {repo} -- {sys.executable} -m shorts run-once"
-    print("Paste this into PowerShell (Windows, not Ubuntu) to run automatic mode every 3 hours:\n")
-    print(f'  schtasks /Create /F /TN "{TASK_NAME}" /SC HOURLY /MO 3 /TR "{command}"\n')
+    print("Paste this into PowerShell (Windows, not Ubuntu) to run automatic mode every 2 hours:\n")
+    print(f'  schtasks /Create /F /TN "{TASK_NAME}" /SC HOURLY /MO {SCHEDULE_EVERY_H} /TR "{command}"\n')
     print("To stop automatic mode:\n")
     print(f'  schtasks /Delete /TN "{TASK_NAME}" /F\n')
     print("It runs while you are logged in to Windows; a console window may flash briefly.")

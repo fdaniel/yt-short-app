@@ -13,7 +13,7 @@ from pathlib import Path
 from shorts.config import Settings
 from shorts.discovery.feeds import FeedItem, article_from_item, fetch_all
 from shorts.discovery.score import ScoredTopic, cheap_filter, coverage, score_topic
-from shorts.discovery.triage import excerpt, triage
+from shorts.discovery.triage import story_text, triage
 from shorts.llm.base import AllProvidersExhausted, InvalidOutput
 from shorts.models import TopicStatus
 from shorts.pipeline import PipelineDeps, PipelineError, VideoResult, make_video
@@ -92,7 +92,7 @@ def _run(settings, deps, conn, now, free_bytes, make) -> RunReport:
 
 def _mentions(it: FeedItem, game_title: str) -> bool:
     """The story itself names the game (full title, or the part after "Series:"), so footage can't be invented."""
-    text = normalise_title(f"{it.title} {excerpt(it.content_html)}")
+    text = normalise_title(f"{it.title} {story_text(it)}")
     names = {normalise_title(game_title), normalise_title(game_title.split(":", 1)[-1])}
     return any(name and f" {name} " in f" {text} " for name in names)
 

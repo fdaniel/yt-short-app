@@ -24,6 +24,7 @@ class FeedItem:
     url: str
     published: datetime  # timezone-aware, UTC
     content_html: str  # full text from content:encoded, or "" when the feed only has a summary
+    summary: str = ""  # the feed's short description (HTML), for judging stories without full text
 
 
 def _published(entry) -> datetime | None:
@@ -38,7 +39,7 @@ def _item(entry, source: FeedSource) -> FeedItem | None:
     if not (title and url and published):
         return None
     content = "".join(part.get("value", "") for part in entry.get("content", []))
-    return FeedItem(source.name, source.topic, title, url, published, content)
+    return FeedItem(source.name, source.topic, title, url, published, content, entry.get("summary") or "")
 
 
 def fetch_feed(client: httpx.Client, source: FeedSource, *, max_bytes: int) -> list[FeedItem]:

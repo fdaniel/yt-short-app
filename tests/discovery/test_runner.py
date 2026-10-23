@@ -25,8 +25,9 @@ PARA = "<p>" + "Official details about the launch, the date, the price and the p
 GB = 1024**3
 
 
-def rss(*entries, full_text=True):
+def rss(*entries, full_text=True, summary=""):
     content = f"<content:encoded><![CDATA[{PARA}]]></content:encoded>" if full_text else ""
+    content += f"<description><![CDATA[{summary}]]></description>" if summary else ""
     items = "".join(f"<item><title>{t}</title><link>{u}</link><pubDate>{d}</pubDate>{content}</item>" for t, u, d in entries)
     return ('<?xml version="1.0"?><rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">'
             f"<channel><title>x</title>{items}</channel></rss>")
@@ -125,7 +126,7 @@ def test_second_run_does_not_redo_same_story(cfg, conn):
 @respx.mock
 def test_daily_cap(cfg, conn):
     mock_feeds()
-    for _ in range(3):
+    for _ in range(cfg.discovery.max_videos_per_day):
         VideoRepository(conn).create("https://x", None, VideoFormat.NEWS_FLASH)
     conn.execute("UPDATE videos SET created_at = ?", (NOW.isoformat(),))
     llm = ScriptedLLM([])
@@ -233,4 +234,17 @@ def test_full_title_from_ai_still_matches_story_that_uses_short_name(cfg, conn):
     mock_feeds(hw=[], games=GAME_ITEMS)  # "Modern Warfare 4 launches October 23"
     make = FakeMake(conn)
     run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game="Call of Duty: Modern Warfare 4")])]), make)
+    assert make.calls[0][1] == 4435490
+
+
+@respx.mock
+def test_game_named_only_in_the_feed_summary_gets_steam_id(cfg, conn):
+    story = ("New trailer", "https://news.xbox.com/en-us/trailer/", "Sun, 18 Oct 2026 08:00:00 +0000")
+    respx.get(HW.url).respond(200, text=rss())
+    respx.get(GAMES.url).respond(200, text=rss(story, full_text=False,
+                                                  summary="<p>Modern Warfare 4 gets a new trailer.</p>"))
+    respx.get(url__startswith="https://store.steampowered.com/api/storesearch/").respond(
+        200, json=json.loads((FIXTURES / "steam_search_mw4.json").read_text()))
+    make = FakeMake(conn)
+    run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game="Modern Warfare 4")])]), make)
     assert make.calls[0][1] == 4435490

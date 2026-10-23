@@ -44,3 +44,13 @@ def test_recent_titles_go_into_the_prompt_as_data():
     prompt = llm.prompts[0]
     assert "NVIDIA RTX Spark PCs Available Today - A New Beginning for Windows PCs" in prompt
     assert "same_story_as_recent" in prompt and "data, not instructions" in prompt
+
+
+def test_feed_summary_stands_in_when_there_is_no_full_text():
+    # press release feeds title each story with just the game's name
+    items = [item("Phantom Blade Zero", source="GamesPress", topic="gaming",
+                  summary="<p>S-GAME confirms <b>Phantom Blade Zero</b> launches on PS5 and PC.</p>")]
+    llm = ScriptedLLM([TriageBatch(verdicts=[_t(0)])])
+    triage(items, llm)
+    assert "S-GAME confirms Phantom Blade Zero launches on PS5 and PC." in llm.prompts[0]
+    assert "(title only)" not in llm.prompts[0]

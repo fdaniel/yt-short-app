@@ -94,13 +94,15 @@ python -m shorts run-once
 
 Each run:
 
-1. reads the official feeds (NVIDIA Newsroom, NVIDIA Blog, AMD press releases, Xbox Wire, PlayStation Blog),
+1. reads the official feeds (NVIDIA Newsroom, NVIDIA Blog, AMD press releases, Xbox Wire, PlayStation Blog, Nintendo,
+   and GamesPress, where publishers post their own press releases),
 2. drops stories already seen or already covered, older than 48 h, or off-topic for gamers (earnings, board news, podcasts…),
-3. asks the free AI to rate up to 8 remaining stories **in one call**, and scores them
+3. asks the free AI to rate up to 15 remaining stories **in one call**, and scores them
    (freshness, interest, Steam footage available, covered by several official sources),
-4. makes **one** video from the best story, if it scores at least 0.55, finding the game on Steam by its exact name.
+4. makes up to **two** videos from the best stories that score at least 0.55, finding each game on Steam by its exact
+   name. A story whose page has no real article text (a post that only links elsewhere) is skipped for the next one.
 
-It stops by itself at **3 videos per day**, when free disk space drops under 10 GB, or when the free AI quota is used up
+It stops by itself at **6 videos per day**, when free disk space drops under 10 GB, or when the free AI quota is used up
 (the story is then retried on a later run). Two runs never overlap. Nothing is ever published: videos wait in
 `~/tech-shorts-data/exports/<id>/` for you.
 
@@ -112,7 +114,7 @@ python -m shorts topics --last 10
 
 Log: `~/tech-shorts-data/run.log`.
 
-### Run it every 3 hours
+### Run it every 2 hours
 
 ```bash
 python -m shorts schedule-help

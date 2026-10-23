@@ -82,6 +82,9 @@ DEFAULT_FEEDS = (
     FeedSource(name="AMD Press Releases", url="https://ir.amd.com/news-events/press-releases/rss", topic="hardware"),
     FeedSource(name="Xbox Wire", url="https://news.xbox.com/en-us/feed/", topic="gaming"),
     FeedSource(name="PlayStation Blog", url="https://blog.playstation.com/feed/", topic="gaming"),
+    FeedSource(name="Nintendo", url="https://www.nintendo.co.uk/news.xml", topic="gaming"),
+    # publishers' own press releases, many a day: new games, release dates, trailers
+    FeedSource(name="GamesPress", url="https://www.gamespress.com/en-US/News/RSS", topic="gaming"),
 )
 
 
@@ -95,10 +98,10 @@ class ScoreWeights(_Frozen):
 class DiscoverySettings(_Frozen):
     feeds: tuple[FeedSource, ...] = DEFAULT_FEEDS
     max_age_h: float = 48
-    max_videos_per_day: int = 3
-    videos_per_run: int = 1
-    max_attempts_per_run: int = 2
-    triage_batch: int = 8
+    max_videos_per_day: int = 6
+    videos_per_run: int = 2
+    max_attempts_per_run: int = 4
+    triage_batch: int = 15
     min_score: float = 0.55
     min_free_gb: float = 10
     history_days: int = 14

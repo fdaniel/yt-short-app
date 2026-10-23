@@ -44,7 +44,7 @@ def _parser() -> argparse.ArgumentParser:
     auto = sub.add_parser("run-once", help="automatic mode: find the best fresh story and make its video")
     auto.add_argument("--config", default="config.yaml", type=Path)
     auto.add_argument("--log-file", type=Path, help="default: <data_dir>/run.log")
-    schedule = sub.add_parser("schedule-help", help="print the Windows command that runs automatic mode every 3 hours")
+    schedule = sub.add_parser("schedule-help", help="print the Windows command that runs automatic mode every 2 hours")
     schedule.add_argument("--config", default="config.yaml", type=Path)
     topics = sub.add_parser("topics", help="recent stories and why they were picked or skipped")
     topics.add_argument("--last", type=int, default=10)

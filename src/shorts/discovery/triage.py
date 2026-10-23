@@ -43,9 +43,14 @@ def excerpt(content_html: str) -> str:
     return " ".join(text.split())[:EXCERPT_CHARS]
 
 
+def story_text(it: FeedItem) -> str:
+    """The start of the story as plain text: the full text if the feed has it, else its summary."""
+    return excerpt(it.content_html or it.summary)
+
+
 def build_triage_prompt(items: list[FeedItem], recent_titles: list[str] | tuple[str, ...] = ()) -> str:
     stories = "\n\n".join(
-        f"[{i}] source: {it.source} ({it.topic})\ntitle: {it.title}\ntext: {excerpt(it.content_html) or '(title only)'}"
+        f"[{i}] source: {it.source} ({it.topic})\ntitle: {it.title}\ntext: {story_text(it) or '(title only)'}"
         for i, it in enumerate(items)
     )
     recent = "\n".join(f"- {t}" for t in list(recent_titles)[:MAX_RECENT_TITLES]) or "- (none yet)"

@@ -34,8 +34,9 @@ limits:
 
 # Automatic mode (python -m shorts run-once). Defaults shown; uncomment to change.
 # discovery:
-#   max_videos_per_day: 3      # local calendar day, failed videos don't count
-#   videos_per_run: 1
+#   max_videos_per_day: 6      # local calendar day, failed videos don't count
+#   videos_per_run: 2
+#   triage_batch: 15           # stories rated by the AI in one call per run
 #   max_age_h: 48              # ignore news older than this
 #   min_score: 0.55            # 0-1; below this, no video is made
 #   min_free_gb: 10            # stop making videos below this much free disk space
@@ -47,6 +48,8 @@ limits:
 #     - {name: AMD Press Releases, url: "https://ir.amd.com/news-events/press-releases/rss", topic: hardware}
 #     - {name: Xbox Wire, url: "https://news.xbox.com/en-us/feed/", topic: gaming}
 #     - {name: PlayStation Blog, url: "https://blog.playstation.com/feed/", topic: gaming}
+#     - {name: Nintendo, url: "https://www.nintendo.co.uk/news.xml", topic: gaming}
+#     - {name: GamesPress, url: "https://www.gamespress.com/en-US/News/RSS", topic: gaming}
 
 # YouTube uploads from the dashboard (python -m shorts youtube-connect first).
 # youtube:
