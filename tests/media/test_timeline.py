@@ -56,11 +56,18 @@ def test_stock_alone_fills_the_video_and_repeats_when_short():
     assert all(i.shot.end - i.shot.start == pytest.approx(i.duration) for i in items)
 
 
-def test_text_goes_over_footage_hook_first_then_every_third_slot():
+def test_opening_slot_is_clean_footage_then_a_fact_every_third_slot():
+    # 7 in 10 viewers swiped past a first frame covered by a text box: the first slot shows footage only
     items = plan(40.0, stock=[shot(i, name="s") for i in range(20)])
     overlays = [i.overlay.name if i.overlay else None for i in items]
-    assert overlays[:8] == ["hook_overlay.png", "fact0_overlay.png", None, None, "fact1_overlay.png", None, None,
-                            "fact0_overlay.png"]  # the hook is not repeated; the fact table is never an overlay
+    assert overlays[:8] == [None, "fact0_overlay.png", None, None, "fact1_overlay.png", None, None,
+                            "fact0_overlay.png"]  # the fact table is never an overlay
+
+
+def test_opening_slot_gets_the_trailer_shot_with_the_most_motion():
+    calm, lively = Shot(Path("t.mp4"), 1, 10.0, 16.0, 0.2), Shot(Path("t.mp4"), 1, 20.0, 26.0, 9.0)
+    items = plan(30.0, trailer=[calm, lively], stills=[Path("a.jpg")])
+    assert items[0].shot.start == 20.0
 
 
 def test_stills_are_backgrounds_with_nothing_over_them():

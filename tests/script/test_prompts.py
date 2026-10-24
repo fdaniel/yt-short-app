@@ -73,3 +73,8 @@ def test_footage_queries_have_no_examples_to_copy():
 def test_hook_must_name_the_game_or_product():
     p = build_script_prompt(article(), VideoFormat.NEWS_FLASH, [], VideoSettings())
     assert "names the game or product" in p
+
+
+def test_hook_leads_with_the_most_striking_fact_not_availability():
+    p = build_script_prompt(article(), VideoFormat.NEWS_FLASH, [], VideoSettings())
+    assert "most striking concrete fact" in p and "not just that it is out" in p

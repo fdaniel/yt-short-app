@@ -70,7 +70,7 @@ def usable_trailer_shots(trailer: list[Shot], duration: float, *, slot_s: float,
     slot = slot_length(duration, slot_s)
     if slot > max_shot_s:
         return []
-    whole = _fitting(trailer, slot)
+    whole = sorted(_fitting(trailer, slot), key=lambda s: s.score, reverse=True)  # the liveliest opens the video
     pieces = sorted((p for run in _runs(trailer) for p in _pieces(run, slot)), key=lambda p: p.score, reverse=True)
     chosen = list(whole)
     for piece in pieces:
@@ -80,9 +80,13 @@ def usable_trailer_shots(trailer: list[Shot], duration: float, *, slot_s: float,
 
 
 def _overlay_for(index: int, cards: list[Card]) -> Path | None:
-    """The hook on the first slot, then the single-fact panels in turn on every OVERLAY_EVERY-th slot."""
+    """Nothing over the first slot, then the single-fact panels in turn on every OVERLAY_EVERY-th slot.
+
+    The first second decides the swipe: a text box over it read as a news slide (7 in 10 swiped away);
+    the hook is spoken and captioned anyway.
+    """
     if index == 0:
-        return cards[0].overlay if cards else None
+        return None
     facts = [c.overlay for c in cards[1:] if c.overlay is not None]
     if index % OVERLAY_EVERY != 1 or not facts:
         return None

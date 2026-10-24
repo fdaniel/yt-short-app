@@ -25,7 +25,8 @@ Rules:
 - Use only facts from the SOURCE below. Do not add anything you know from elsewhere.
 - Total narration (hook + body + closing) must be {video.min_words}-{video.max_words} words.
 - The hook is at most 12 words, names the game or product (for an expansion or update, the main game too,
-  e.g. its full name), and makes people want to keep watching without exaggerating.
+  e.g. its full name), and leads with the most striking concrete fact in the SOURCE (a new feature, a
+  number, a surprise), not just that it is out or announced. No exaggeration.
 - Every sentence adds a new fact. Never repeat or reword the hook or an earlier sentence, and say only once
   that something is out or available.
 - No labels or filler such as "News flash", "Breaking news" or "In other news": start with the news.
