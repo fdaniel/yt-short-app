@@ -7,6 +7,7 @@ import shutil
 import webbrowser
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -73,8 +74,18 @@ def _description(text: str) -> str:
     return _plain(text).encode()[:MAX_DESCRIPTION].decode(errors="ignore")
 
 
-def upload_body(meta: dict[str, Any], settings: YouTubeSettings) -> dict[str, Any]:
-    """The videos.insert request body for one exported video's metadata.json."""
+def upload_body(meta: dict[str, Any], settings: YouTubeSettings, publish_at: datetime | None = None) -> dict[str, Any]:
+    """The videos.insert request body for one exported video's metadata.json.
+
+    With `publish_at`, YouTube keeps the video private and makes it public at that time by itself.
+    """
+    status: dict[str, Any] = {
+        "privacyStatus": "private" if publish_at else settings.privacy_status,
+        "selfDeclaredMadeForKids": False,
+        "containsSyntheticMedia": settings.synthetic_media,
+    }
+    if publish_at:
+        status["publishAt"] = publish_at.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     return {
         "snippet": {
             "title": " ".join(_plain(str(meta.get("title", ""))).split())[:MAX_TITLE] or "Tech news",
@@ -82,11 +93,7 @@ def upload_body(meta: dict[str, Any], settings: YouTubeSettings) -> dict[str, An
             "tags": _tags([str(h) for h in meta.get("hashtags") or []]),
             "categoryId": settings.category_id,
         },
-        "status": {
-            "privacyStatus": settings.privacy_status,
-            "selfDeclaredMadeForKids": False,
-            "containsSyntheticMedia": settings.synthetic_media,
-        },
+        "status": status,
     }
 
 

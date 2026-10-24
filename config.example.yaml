@@ -56,3 +56,4 @@ limits:
 #   privacy_status: public     # public | unlisted | private (unaudited apps are forced to private)
 #   category_id: "28"          # Science & Technology
 #   synthetic_media: false     # YouTube's "altered or synthetic content" label
+#   audit_approved: false      # true once Google approves the API audit: turns on the Schedule button

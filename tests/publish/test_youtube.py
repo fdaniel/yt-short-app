@@ -1,6 +1,7 @@
 import json
 import stat
 import webbrowser
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from googleapiclient.errors import HttpError
@@ -229,3 +230,14 @@ def test_sign_in_link_goes_to_the_windows_url_handler(monkeypatch):
     youtube._use_windows_browser()
     browser = webbrowser.get("windows")
     assert [browser.name, *browser.args] == ["rundll32.exe", "url.dll,FileProtocolHandler", "%s"]
+
+
+def test_scheduled_upload_is_private_until_its_publish_time():
+    lisbon_summer = timezone(timedelta(hours=1))
+    body = upload_body(META, YouTubeSettings(), publish_at=datetime(2026, 10, 24, 13, 0, tzinfo=lisbon_summer))
+    assert body["status"]["privacyStatus"] == "private"
+    assert body["status"]["publishAt"] == "2026-10-24T12:00:00Z"
+
+
+def test_upload_now_has_no_publish_time():
+    assert "publishAt" not in upload_body(META, YouTubeSettings())["status"]

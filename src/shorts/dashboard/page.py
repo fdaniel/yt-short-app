@@ -43,9 +43,10 @@ video { width:100%; aspect-ratio:9/16; background:#000; border-radius:8px; }
 .nofile { aspect-ratio:9/16; display:grid; place-items:center; border:1px dashed var(--line); border-radius:8px; }
 h2 { font-size:17px; margin:0 0 4px; }
 label { display:block; font-weight:600; font-size:13px; margin:12px 0 4px; }
-textarea, input[type=text] { width:100%; font:inherit; font-size:13px; color:var(--text); background:var(--bg);
+textarea, input[type=text], input[type=datetime-local] { width:100%; font:inherit; font-size:13px; color:var(--text); background:var(--bg);
   border:1px solid var(--line); border-radius:6px; padding:6px 8px; }
 textarea { resize:vertical; }
+input[type=datetime-local] { width:auto; }
 .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:8px; }
 button, .button { font:inherit; font-size:14px; padding:7px 14px; border-radius:6px; border:1px solid var(--line);
   background:var(--card); color:var(--text); cursor:pointer; text-decoration:none; display:inline-block; }
@@ -125,6 +126,7 @@ def _review_actions(card: VideoCard, view: DashboardView, token: str) -> str:
                  f'<a href="{YOUTUBE_TERMS_URL}" target="_blank" rel="noopener noreferrer">Terms of Service</a> and '
                  f'<a href="{YOUTUBE_GUIDELINES_URL}" target="_blank" rel="noopener noreferrer">Community Guidelines</a>.'
                  "</span>")
+        auto += _schedule_form(vid, token, tab, view)
     else:
         auto = ('<span class="muted">One-click upload: connect your channel first with '
                 '<code>python -m shorts youtube-connect</code>.</span>')
@@ -139,6 +141,17 @@ def _review_actions(card: VideoCard, view: DashboardView, token: str) -> str:
     discard = _form(vid, "discard", token, tab, '<button class="danger">Discard</button>',
                     f"Discard video #{vid}? Its video file will be deleted.")
     return f'<div class="row">{auto}{discard}</div>{by_hand}'
+
+
+def _schedule_form(vid: int, token: str, tab: str, view: DashboardView) -> str:
+    if not view.can_schedule:
+        return ('<span class="muted">Scheduling here works once Google approves your app (see README); until then'
+                " upload by hand and pick Schedule in YouTube Studio.</span>")
+    return _form(vid, "schedule", token, tab,
+                 f'<label for="when-{vid}">Publish at</label>'
+                 f'<span class="row"><input type="datetime-local" name="publish_at" id="when-{vid}" required>'
+                 "<button>Schedule</button></span>",
+                 f"Upload video #{vid} to {view.channel.title} now and make it public at the time you picked?")
 
 
 def _mark_form(vid: int, token: str, tab: str) -> str:

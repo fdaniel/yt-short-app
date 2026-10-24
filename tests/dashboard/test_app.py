@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 from shorts.dashboard.app import Dashboard
 from shorts.models import VideoStatus
 from shorts.publish.youtube import YouTubeError
@@ -178,3 +180,51 @@ def test_discard_reports_undeletable_file(settings, make_ready_video, monkeypatc
     monkeypatch.setattr(Path, "unlink", denied)
     message = _dash(settings).discard(vid)
     assert "discarded" in message and "could not be deleted" in message
+
+
+def _approved(settings):
+    return settings.model_copy(update={"youtube": settings.youtube.model_copy(update={"audit_approved": True})})
+
+
+def _in(**delta):
+    """A time as the page's date-and-time box sends it: local time, no time zone."""
+    return (datetime.now() + timedelta(**delta)).strftime("%Y-%m-%dT%H:%M")
+
+
+def test_schedule_uploads_private_with_publish_time(settings, make_ready_video):
+    vid = make_ready_video()
+    account = FakeAccount(privacy="private")
+    when = _in(days=1)
+    message = _dash(_approved(settings), account).schedule(vid, when)
+    _, body = account.uploads[0]
+    assert body["status"]["privacyStatus"] == "private"
+    publish_at = datetime.fromisoformat(body["status"]["publishAt"].replace("Z", "+00:00"))
+    assert publish_at == datetime.fromisoformat(when).astimezone()
+    assert "scheduled" in message and "Tech Bits" in message
+    record = _status(settings, vid)
+    assert record.status == VideoStatus.APPROVED and record.youtube_id == "abcdefghijk"
+
+
+def test_schedule_waits_for_google_approval(settings, make_ready_video):
+    vid = make_ready_video()
+    account = FakeAccount(privacy="private")
+    message = _dash(settings, account).schedule(vid, _in(days=1))
+    assert "approves" in message and not account.uploads
+    assert _status(settings, vid).status == VideoStatus.AWAITING_APPROVAL
+
+
+def test_schedule_refuses_a_time_too_soon_or_too_far(settings, make_ready_video):
+    vid = make_ready_video()
+    account = FakeAccount(privacy="private")
+    dash = _dash(_approved(settings), account)
+    assert "at least" in dash.schedule(vid, _in(minutes=5))
+    assert "at most" in dash.schedule(vid, _in(days=90))
+    assert "date and time" in dash.schedule(vid, "tomorrow lunch")
+    assert not account.uploads and _status(settings, vid).status == VideoStatus.AWAITING_APPROVAL
+
+
+def test_schedule_failure_leaves_video_for_review(settings, make_ready_video):
+    vid = make_ready_video()
+    account = FakeAccount(error=YouTubeError("YouTube refused the upload: quota"))
+    assert "quota" in _dash(_approved(settings), account).schedule(vid, _in(days=1))
+    assert _status(settings, vid).status == VideoStatus.AWAITING_APPROVAL

@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 MAX_FORM_BYTES = 10_000
 CHUNK = 256 * 1024
 _VIDEO = re.compile(r"/videos/(\d{1,9})\.mp4")
-_ACTION = re.compile(r"/videos/(\d{1,9})/(upload|mark-uploaded|discard|open-folder|back-to-review)")
+_ACTION = re.compile(r"/videos/(\d{1,9})/(upload|schedule|mark-uploaded|discard|open-folder|back-to-review)")
 _RANGE = re.compile(r"bytes=(\d{0,18})-(\d{0,18})")
 _SECURITY_HEADERS = {
     "X-Frame-Options": "DENY",
@@ -175,6 +175,7 @@ class _Handler(BaseHTTPRequestHandler):
         dashboard = self.server.dashboard
         actions = {
             "upload": lambda: dashboard.upload(video_id),
+            "schedule": lambda: dashboard.schedule(video_id, form.get("publish_at", "")),
             "mark-uploaded": lambda: dashboard.mark_uploaded(video_id, form.get("link", "")),
             "discard": lambda: dashboard.discard(video_id),
             "open-folder": lambda: dashboard.open_folder(video_id),
