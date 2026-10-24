@@ -15,6 +15,8 @@ MIN_PROSE_WORDS = 10
 # a sentence end: two letters or digits ("PS5.", "4K.", "été."), then . or ?, then a space or the end of the line;
 # "!" is left out because headlines end with it ("Play Now!")
 _TAG = re.compile(r"<[^>]+>")
+_LABEL_PREFIX = re.compile(r"^\[[^\]]{1,20}\]\s*")
+_SITE_SUFFIX = re.compile(r"\s+[|\u2013\u2014-]\s+(?:\S+\s+){0,2}\S+$")  # " | Site Name", 1-3 words
 _SENTENCE_END = re.compile(r"\w{2}[.?][\"”’)]?(\s|$)")
 
 
@@ -48,6 +50,8 @@ def extract_article(url: str, html: str) -> Article:
     raw_title = metadata.title if metadata and metadata.title else ""
     # some newsrooms (GamesPress) put <em> tags in their titles, and the title goes on a card
     title = " ".join(_TAG.sub("", html_lib.unescape(raw_title)).split())
+    # "[Notices] Headline | Site Name": the labels are the website's, not part of the news
+    title = _SITE_SUFFIX.sub("", _LABEL_PREFIX.sub("", title)).strip()
     return Article(url=url, title=title, text=text, domain=urlparse(url).hostname or "")
 
 

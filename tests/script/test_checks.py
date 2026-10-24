@@ -116,3 +116,13 @@ def test_sharing_a_topic_word_with_the_hook_passes():
 
 def test_plain_draft_has_no_repetition():
     assert repetition_problems(draft()) == []
+
+
+def test_quote_shortened_with_an_ellipsis_matches_when_every_part_is_verbatim():
+    quote = "The RTX 5090 launches January 30... It has 32GB of GDDR7 memory."
+    assert quotes_missing(draft(claims=[Claim(text="x", source_quote=quote)]), SOURCE) == []
+
+
+def test_ellipsis_does_not_excuse_invented_words():
+    quote = "The RTX 5090 launches January 30... It has 64GB of memory."
+    assert quotes_missing(draft(claims=[Claim(text="x", source_quote=quote)]), SOURCE) == [quote]

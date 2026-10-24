@@ -32,9 +32,25 @@ def _normalise(text: str) -> str:
     return " ".join(text.translate(_TYPOGRAPHY).lower().split())
 
 
+_ELLIPSIS = re.compile(r"\.\.\.|\u2026")
+
+
+def _quoted(quote: str, source: str) -> bool:
+    """Verbatim, where a quote shortened with "..." counts when every part is verbatim, in order."""
+    position = 0
+    for part in (_normalise(p) for p in _ELLIPSIS.split(quote)):
+        if not part:
+            continue
+        found = source.find(part, position)
+        if found < 0:
+            return False
+        position = found + len(part)
+    return position > 0
+
+
 def quotes_missing(draft: ScriptDraft, source_text: str) -> list[str]:
     source = _normalise(source_text)
-    return [c.source_quote for c in draft.claims if _normalise(c.source_quote) not in source]
+    return [c.source_quote for c in draft.claims if not _quoted(c.source_quote, source)]
 
 
 def _numbers(text: str) -> list[str]:

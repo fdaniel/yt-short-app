@@ -68,3 +68,8 @@ def test_footage_queries_have_no_examples_to_copy():
     p = build_script_prompt(article(), VideoFormat.NEWS_FLASH, [], VideoSettings())
     assert "circuit board" not in p and "server room" not in p
     assert "what the story itself is about" in p
+
+
+def test_hook_must_name_the_game_or_product():
+    p = build_script_prompt(article(), VideoFormat.NEWS_FLASH, [], VideoSettings())
+    assert "names the game or product" in p

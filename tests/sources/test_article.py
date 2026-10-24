@@ -73,3 +73,15 @@ def test_markup_in_the_page_title_is_removed():
     article = extract_article("https://www.gamespress.com/x", html)
     assert "<" not in article.title and "em>" not in article.title
     assert article.title.startswith("Warrior Cats Is Out Now")
+
+
+@pytest.mark.parametrize("raw, clean", [
+    ("[Notices] Charting the Unknown DLC Features Overview | Crimson Desert",
+     "Charting the Unknown DLC Features Overview"),
+    ("NVIDIA Announces GeForce RTX 5090 | NVIDIA Newsroom", "NVIDIA Announces GeForce RTX 5090"),
+    ("Patch Notes | Fixes for crashes, saves and online play", "Patch Notes | Fixes for crashes, saves and online play"),  # a long tail is the headline
+])
+def test_site_labels_are_removed_from_the_title(raw, clean):
+    html = (FIXTURES / "article_nvidia.html").read_text().replace("NVIDIA Announces GeForce RTX 5090 | NVIDIA Newsroom", raw)
+    html = html.replace("NVIDIA Announces GeForce RTX 5090", raw)
+    assert extract_article("https://example.com/x", html).title == clean

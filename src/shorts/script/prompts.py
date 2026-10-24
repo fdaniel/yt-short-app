@@ -24,7 +24,8 @@ Rules:
 - Write in English.
 - Use only facts from the SOURCE below. Do not add anything you know from elsewhere.
 - Total narration (hook + body + closing) must be {video.min_words}-{video.max_words} words.
-- The hook is at most 12 words and makes people want to keep watching without exaggerating.
+- The hook is at most 12 words, names the game or product (for an expansion or update, the main game too,
+  e.g. its full name), and makes people want to keep watching without exaggerating.
 - Every sentence adds a new fact. Never repeat or reword the hook or an earlier sentence, and say only once
   that something is out or available.
 - No labels or filler such as "News flash", "Breaking news" or "In other news": start with the news.
