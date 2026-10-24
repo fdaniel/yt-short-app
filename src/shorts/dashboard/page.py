@@ -10,6 +10,8 @@ from shorts.models import VideoStatus
 
 YOUTUBE_UPLOAD_URL = "https://www.youtube.com/upload"
 YOUTUBE_STUDIO_URL = "https://studio.youtube.com"
+YOUTUBE_TERMS_URL = "https://www.youtube.com/t/terms"
+YOUTUBE_GUIDELINES_URL = "https://www.youtube.com/howyoutubeworks/policies/community-guidelines/"
 TAB_LABELS = {
     "review": "To review",
     "published": "Published",
@@ -118,6 +120,11 @@ def _review_actions(card: VideoCard, view: DashboardView, token: str) -> str:
         auto = _form(vid, "upload", token, tab,
                      f'<button class="primary">Upload to {escape(view.channel.title)}</button>',
                      f"Upload video #{vid} to {view.channel.title} as {view.privacy} now?")
+        # YouTube's API policies: an upload tool must show its users YouTube's terms
+        auto += (f'<span class="muted">Uploading means you agree to YouTube\'s '
+                 f'<a href="{YOUTUBE_TERMS_URL}" target="_blank" rel="noopener noreferrer">Terms of Service</a> and '
+                 f'<a href="{YOUTUBE_GUIDELINES_URL}" target="_blank" rel="noopener noreferrer">Community Guidelines</a>.'
+                 "</span>")
     else:
         auto = ('<span class="muted">One-click upload: connect your channel first with '
                 '<code>python -m shorts youtube-connect</code>.</span>')

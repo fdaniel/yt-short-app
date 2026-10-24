@@ -71,3 +71,10 @@ def test_uploading_card_offers_recovery_not_upload(settings, make_ready_video):
 def test_upload_confirm_states_privacy(settings, make_ready_video):
     make_ready_video()
     assert "as public" in _html(settings)
+
+
+def test_upload_button_links_youtube_terms_and_guidelines(settings, make_ready_video):
+    make_ready_video()
+    html = _html(settings)
+    assert 'href="https://www.youtube.com/t/terms"' in html
+    assert 'href="https://www.youtube.com/howyoutubeworks/policies/community-guidelines/"' in html
