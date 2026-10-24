@@ -1,5 +1,6 @@
 from shorts.config import VideoSettings
 from shorts.script.checks import (
+    repetition_problems,
     card_problems,
     length_problems,
     narration_lines,
@@ -80,3 +81,38 @@ def test_too_few_card_facts_flagged():
 
 def test_enough_card_facts_pass():
     assert card_problems(draft()) == []
+
+
+PAD = ["It costs $1,999.", "It has 32GB of GDDR7 memory."]
+
+
+def test_filler_label_flagged():
+    problems = repetition_problems(draft(body=["News flash: it launches January 30.", *PAD]))
+    assert len(problems) == 1 and "News flash" in problems[0]
+
+
+def test_saying_twice_that_the_same_thing_is_out_flagged():
+    problems = repetition_problems(draft(hook="Final Fantasy Resonance is out now with a free demo.",
+                                         body=["Final Fantasy Resonance is available now on Xbox and PC.", *PAD]))
+    assert len(problems) == 1 and "twice" in problems[0]
+
+
+def test_different_things_available_now_pass():
+    # an update and one of its features are two facts, not a repeat
+    assert repetition_problems(draft(hook="A free Edgerunners 2 update is now live for Cyberpunk 2077.",
+                                     body=["Dual wielding is now available with a pistol in each hand.", *PAD])) == []
+
+
+def test_body_repeating_the_hook_flagged():
+    problems = repetition_problems(draft(hook="Gamers logged millions of hours in AION 2 since launch.",
+                                         body=["In the 18 days since launch, players logged more than 108 million hours.", *PAD]))
+    assert len(problems) == 1 and "hook" in problems[0]
+
+
+def test_sharing_a_topic_word_with_the_hook_passes():
+    assert repetition_problems(draft(hook="Campaign early access for Modern Warfare 4 is live.",
+                                     body=["DMZ early access starts October 20.", *PAD])) == []
+
+
+def test_plain_draft_has_no_repetition():
+    assert repetition_problems(draft()) == []

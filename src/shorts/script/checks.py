@@ -56,3 +56,51 @@ def card_problems(draft: ScriptDraft) -> list[str]:
     if len(draft.card_facts) < MIN_CARD_FACTS:
         return [f"card_facts has {len(draft.card_facts)} entries; give {MIN_CARD_FACTS} to 6 from the SOURCE"]
     return []
+
+
+_FILLER = re.compile(r"\b(news flash|breaking news|in other news)\b|^\s*breaking\b", re.IGNORECASE)
+_OUT_NOW = re.compile(r"\b(out now|available now|now available|now live|is live|available today|out today"
+                      r"|launches today|has launched|is here)\b", re.IGNORECASE)
+_STOP_WORDS = frozenset("""the a an and or of to in on for with is are was were be been it its this that these those
+you your can will now at by from as has have had new more than into over upon their they them our we all any also
+just which who what when where how about after before up out not but so if then there here since one two three""".split())
+# a body line repeats the hook when it reuses at least this many of the hook's words, and this share of them
+MIN_SHARED_WORDS = 3
+MIN_SHARED_SHARE = 0.6
+
+
+def _bare(word: str) -> str:
+    return word.strip(".,!?:;\"'()")
+
+
+def _content_words(line: str) -> set[str]:
+    """Plain words that carry meaning: no names (capitalised), numbers or small words; plural 's' dropped."""
+    words = set()
+    for word in map(_bare, line.split()):
+        if not word or word[0].isupper() or any(ch.isdigit() for ch in word):
+            continue
+        word = word.lower()
+        if word not in _STOP_WORDS and len(word) > 2:
+            words.add(word[:-1] if word.endswith("s") and len(word) > 3 else word)
+    return words
+
+
+def _names(line: str) -> set[str]:
+    """Capitalised words after the first (which is capitalised anyway): the game, product or company."""
+    return {_bare(word) for word in line.split()[1:] if word[:1].isupper()} - {"The", "A"}
+
+
+def repetition_problems(draft: ScriptDraft) -> list[str]:
+    """A Short has no time to say anything twice: filler labels, "out now" twice, a body line restating the hook."""
+    lines = narration_lines(draft)
+    problems = [f"filler label {match.group(0).strip()!r} in the narration: start with the news itself"
+                for line in lines if (match := _FILLER.search(line))]
+    out_now = [line for line in lines if _OUT_NOW.search(line)]
+    problems += [f"says twice that it is out or available ({first!r} / {second!r}): say it once, add a new fact instead"
+                 for i, first in enumerate(out_now) for second in out_now[i + 1:] if _names(first) & _names(second)]
+    hook = _content_words(lines[0])
+    for line in lines[1:]:
+        shared = hook & _content_words(line)
+        if len(shared) >= MIN_SHARED_WORDS and len(shared) >= MIN_SHARED_SHARE * len(hook):
+            problems.append(f"repeats the hook ({lines[0]!r} / {line!r}): every sentence must add a new fact")
+    return problems

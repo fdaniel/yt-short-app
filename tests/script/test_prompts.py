@@ -55,3 +55,9 @@ def test_odd_footage_queries_never_fail_the_script():
     assert ScriptDraft.model_validate({**data, "footage_queries": None}).footage_queries == []
     assert ScriptDraft.model_validate({**data, "footage_queries": ["laptop", 7, None]}).footage_queries == ["laptop"]
     assert ScriptDraft.model_validate({**data, "footage_queries": "laptop"}).footage_queries == []
+
+
+def test_script_prompt_forbids_repeats_and_labels_the_ai_would_copy():
+    p = build_script_prompt(article(), VideoFormat.NEWS_FLASH, [], VideoSettings())
+    assert "Never repeat or reword the hook" in p
+    assert "News flash:" not in p.split("No labels")[0] and "Format: What was announced" in p
