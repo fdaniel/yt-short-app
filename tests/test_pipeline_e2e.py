@@ -29,8 +29,6 @@ GOOD = ScriptDraft(
         "Inside you get 32GB of GDDR7 memory and 21,760 CUDA cores.",
         "NVIDIA says it is up to twice as fast as the RTX 4090 with DLSS 4 Multi Frame Generation turned on.",
         "That feature can generate up to three extra frames for every rendered frame.",
-        "And 75 games and apps will support it at launch.",
-        "The RTX 5080 arrives the same day for $999 with 16GB of memory.",
     ],
     closing="Is the RTX 5090 worth it for you? Tell me below.",
     title_options=["RTX 5090: price, date and specs", "NVIDIA RTX 5090 is official", "RTX 5090 launch details"],
@@ -90,7 +88,8 @@ def test_e2e_empty_article_fails_cleanly(settings, conn):
 def test_e2e_narration_too_long_fails_before_render(settings, conn):
     mock_sources()
     deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.2))
-    with pytest.raises(PipelineError, match=r"narration is \d+\.\ds, allowed 30–55s"):
+    v = settings.video
+    with pytest.raises(PipelineError, match=rf"narration is \d+\.\ds, allowed {v.min_narration_s:g}–{v.max_narration_s:g}s"):
         make_video(NEWS, None, VideoFormat.NEWS_FLASH, settings, deps, conn)
     assert not (settings.data_dir / "exports").exists()
     assert VideoRepository(conn).get(1).status == VideoStatus.FAILED

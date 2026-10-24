@@ -10,7 +10,7 @@ def test_load_settings_reads_yaml_and_env(tmp_path):
     assert s.gemini_api_key == "k"
     assert s.fallback_api_key is None
     assert s.data_dir == tmp_path
-    assert (s.video.min_narration_s, s.video.max_narration_s) == (30, 55)
+    assert (s.video.min_narration_s, s.video.max_narration_s) == (25, 48)
     assert s.video.max_shot_s == 4.0 and s.video.max_trailer_share == 0.49
     assert s.video.max_output_mb == 50
 
