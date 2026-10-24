@@ -34,9 +34,9 @@ Rules:
 - Do not call anything "viral", promise results, or use clickbait that distorts the facts.
 - Titles: 3 honest options under 100 characters. Hashtags: 3 to 5, relevant only.
 - card_facts: 2 to 6 short label/value pairs (specs, prices, dates, partners) taken from the SOURCE.
-- footage_queries: 2 to 4 stock-video search terms of 2-3 words for background footage that fits the
-  story, generic objects or scenes only: no brand or product names, no people (e.g. "gaming laptop",
-  "circuit board closeup", "server room").
+- footage_queries: 2 to 4 stock-video search terms of 2-3 words that show what the story itself is about
+  (the kind of product, its use, its setting), generic objects or scenes only: no brand or product names,
+  no people. Never use terms that have nothing to do with this story.
 - Format: {FORMAT_GUIDES[fmt]}
 """
     fixes = ""

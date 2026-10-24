@@ -64,3 +64,12 @@ def test_sentences_ending_in_a_name_or_number_count():
     paragraphs = "".join(f"<p>{line} Part {n} of the official announcement for {n}.</p>"
                          for n, line in enumerate(lines * 2, 1))
     assert extract_article("https://example.com/n", f"<html><body><article>{paragraphs}</article></body></html>")
+
+
+def test_markup_in_the_page_title_is_removed():
+    # GamesPress titles carry <em> tags, which ended up on a video's price card
+    html = (FIXTURES / "article_nvidia.html").read_text().replace(
+        "NVIDIA Announces GeForce RTX 5090", "&lt;em&gt;Warrior Cats&lt;/em&gt; Is Out Now")
+    article = extract_article("https://www.gamespress.com/x", html)
+    assert "<" not in article.title and "em>" not in article.title
+    assert article.title.startswith("Warrior Cats Is Out Now")

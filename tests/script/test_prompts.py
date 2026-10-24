@@ -61,3 +61,10 @@ def test_script_prompt_forbids_repeats_and_labels_the_ai_would_copy():
     p = build_script_prompt(article(), VideoFormat.NEWS_FLASH, [], VideoSettings())
     assert "Never repeat or reword the hook" in p
     assert "News flash:" not in p.split("No labels")[0] and "Format: What was announced" in p
+
+
+def test_footage_queries_have_no_examples_to_copy():
+    # the AI copied "gaming laptop", "circuit board closeup", "server room" into a cat game's video
+    p = build_script_prompt(article(), VideoFormat.NEWS_FLASH, [], VideoSettings())
+    assert "circuit board" not in p and "server room" not in p
+    assert "what the story itself is about" in p

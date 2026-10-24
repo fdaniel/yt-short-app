@@ -1,5 +1,6 @@
 """Fetch an official news page and extract its main text."""
 
+import html as html_lib
 import re
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -13,6 +14,7 @@ MIN_TEXT_CHARS = 400
 MIN_PROSE_WORDS = 10
 # a sentence end: two letters or digits ("PS5.", "4K.", "été."), then . or ?, then a space or the end of the line;
 # "!" is left out because headlines end with it ("Play Now!")
+_TAG = re.compile(r"<[^>]+>")
 _SENTENCE_END = re.compile(r"\w{2}[.?][\"”’)]?(\s|$)")
 
 
@@ -43,7 +45,9 @@ def extract_article(url: str, html: str) -> Article:
             "(the page may need JavaScript, a login or a cookie consent)"
         )
     metadata = trafilatura.extract_metadata(html)
-    title = (metadata.title if metadata and metadata.title else "").strip()
+    raw_title = metadata.title if metadata and metadata.title else ""
+    # some newsrooms (GamesPress) put <em> tags in their titles, and the title goes on a card
+    title = " ".join(_TAG.sub("", html_lib.unescape(raw_title)).split())
     return Article(url=url, title=title, text=text, domain=urlparse(url).hostname or "")
 
 

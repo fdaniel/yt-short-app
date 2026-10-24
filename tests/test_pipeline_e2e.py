@@ -101,7 +101,7 @@ def test_e2e_no_footage_at_all_is_refused(settings, conn):
     respx.get(NEWS).respond(200, text=(FIXTURES / "article_nvidia.html").read_text())
     respx.get(url__startswith="https://store.steampowered.com/api/appdetails").respond(503)
     deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
-    with pytest.raises(PipelineError, match="no footage.*PIXABAY_API_KEY"):
+    with pytest.raises(PipelineError, match="no footage for this game"):
         make_video(NEWS, 999, VideoFormat.NEWS_FLASH, settings, deps, conn)
     assert VideoRepository(conn).get(1).status == VideoStatus.FAILED
     assert not (settings.data_dir / "exports").exists()
@@ -147,13 +147,13 @@ def steam_media(video, screenshot=None):
 
 
 def trailer_scenes_of(length):
-    """Trailer scenes of `length` seconds; downloaded stock clips keep their real scenes."""
+    """Trailer scenes of `length` seconds with skipped (dark) scenes between; stock clips keep their real scenes."""
     from shorts.media.shots import detect_shots as real
 
     def _detect(path, asset_id, **kwargs):
         if path.name.startswith("stock"):
             return real(path, asset_id, **kwargs)
-        return [Shot(path, asset_id, 0.5 + k * length, 0.5 + (k + 1) * length, 1.0) for k in range(8)]
+        return [Shot(path, asset_id, 0.5 + k * (length + 1), 0.5 + k * (length + 1) + length, 1.0) for k in range(8)]
 
     return _detect
 
@@ -179,16 +179,31 @@ def test_e2e_game_with_trailer_and_screenshots_does_not_search_stock(
 
 
 @respx.mock
-def test_e2e_trailer_with_only_short_scenes_gets_stock(pexels_settings, conn, synthetic_video, monkeypatch):
-    # fast-cut trailers: every scene shorter than a slot, so none can be used
+def test_e2e_game_with_screenshots_but_only_short_trailer_scenes_does_not_search_stock(
+    pexels_settings, conn, synthetic_video, screenshot, monkeypatch
+):
+    mock_sources()
+    search = mock_pexels(synthetic_video)
+    monkeypatch.setattr("shorts.pipeline.collect_steam_assets", steam_media(synthetic_video, screenshot))
+    monkeypatch.setattr("shorts.pipeline.detect_shots", trailer_scenes_of(2.0))
+    deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
+    make_video(NEWS, 2, VideoFormat.NEWS_FLASH, pexels_settings, deps, conn)
+    assert search.call_count == 0
+
+
+@respx.mock
+def test_e2e_game_never_gets_stock_even_when_its_trailer_is_unusable(
+    pexels_settings, conn, synthetic_video, monkeypatch
+):
+    # fast-cut trailer and no screenshots: refuse rather than fill a game video with generic stock
     mock_sources()
     search = mock_pexels(synthetic_video)
     monkeypatch.setattr("shorts.pipeline.collect_steam_assets", steam_media(synthetic_video))
     monkeypatch.setattr("shorts.pipeline.detect_shots", trailer_scenes_of(2.0))
     deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
-    r = make_video(NEWS, 2, VideoFormat.NEWS_FLASH, pexels_settings, deps, conn)
-    assert search.call_count >= 1
-    assert AssetKind.STOCK_VIDEO in {a.kind for a in AssetRepository(conn).list_for_video(r.video_id)}
+    with pytest.raises(PipelineError, match="no footage"):
+        make_video(NEWS, 2, VideoFormat.NEWS_FLASH, pexels_settings, deps, conn)
+    assert search.call_count == 0
 
 
 @respx.mock
@@ -332,16 +347,6 @@ def test_interrupt_marks_failed(settings, conn):
 
 
 @respx.mock
-def test_broken_screenshot_is_skipped(pexels_settings, conn, synthetic_video):
-    mock_sources()
-    mock_pexels(synthetic_video)
-    respx.get(url__regex=r".*\.jpg.*").respond(200, content=b"not an image")
-    deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
-    r = make_video(NEWS, 2, VideoFormat.NEWS_FLASH, pexels_settings, deps, conn)
-    assert r.video_path.exists()
-
-
-@respx.mock
 def test_only_broken_screenshots_is_no_footage(settings, conn):
     mock_sources()
     respx.get(url__regex=r".*\.jpg.*").respond(200, content=b"not an image")
@@ -351,11 +356,13 @@ def test_only_broken_screenshots_is_no_footage(settings, conn):
 
 
 @respx.mock
-def test_unexpected_steam_error_falls_back_to_stock(pexels_settings, conn, monkeypatch, synthetic_video):
+def test_unexpected_steam_error_refuses_the_game_story_instead_of_using_stock(
+    pexels_settings, conn, monkeypatch, synthetic_video
+):
     mock_sources()
-    mock_pexels(synthetic_video)
+    search = mock_pexels(synthetic_video)
     monkeypatch.setattr("shorts.pipeline.collect_steam_assets", lambda *a, **k: (_ for _ in ()).throw(OSError("disk")))
     deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
-    r = make_video(NEWS, 2, VideoFormat.NEWS_FLASH, pexels_settings, deps, conn)
-    kinds = {a.kind for a in AssetRepository(conn).list_for_video(r.video_id)}
-    assert kinds == {AssetKind.CARD, AssetKind.STOCK_VIDEO}
+    with pytest.raises(PipelineError, match="no footage"):
+        make_video(NEWS, 2, VideoFormat.NEWS_FLASH, pexels_settings, deps, conn)
+    assert search.call_count == 0

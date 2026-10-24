@@ -9,6 +9,7 @@ from shorts.media.shots import Shot
 
 
 _EPSILON = 1e-6  # clips cut to exactly one slot can come out a hair short in floating point
+ADJACENT_S = 0.15  # scenes this close are back to back: the trailer's own cut, nothing skipped between
 OVERLAY_EVERY = 3  # after the hook, a text panel on every third slot: the footage stays the star
 
 
@@ -39,10 +40,43 @@ def _fitting(shots: list[Shot], slot: float) -> list[Shot]:
     return [s for s in shots if s.end - s.start >= slot - _EPSILON]
 
 
+def _runs(shots: list[Shot]) -> list[Shot]:
+    """Back-to-back scenes of one trailer joined into one stretch; a gap means a skipped scene in between."""
+    runs: list[Shot] = []
+    for shot in sorted(shots, key=lambda s: (str(s.source), s.start)):
+        last = runs[-1] if runs else None
+        if last and last.source == shot.source and shot.start - last.end <= ADJACENT_S:
+            runs[-1] = replace(last, end=shot.end, score=max(last.score, shot.score))
+        else:
+            runs.append(shot)
+    return runs
+
+
+def _pieces(run: Shot, slot: float) -> list[Shot]:
+    count = int((run.end - run.start + _EPSILON) // slot)
+    return [replace(run, start=run.start + k * slot, end=run.start + (k + 1) * slot) for k in range(count)]
+
+
+def _overlaps(a: Shot, b: Shot) -> bool:
+    return a.source == b.source and a.start < b.end - _EPSILON and b.start < a.end - _EPSILON
+
+
 def usable_trailer_shots(trailer: list[Shot], duration: float, *, slot_s: float, max_shot_s: float) -> list[Shot]:
-    """The trailer shots the timeline can actually use: a whole slot long, and slots within the excerpt limit."""
+    """The trailer shots the timeline can actually use: a whole slot long, and slots within the excerpt limit.
+
+    Whole scenes first; fast-cut trailers (every scene shorter than a slot) add slot-long pieces of
+    their back-to-back scenes, each still one excerpt within the limit.
+    """
     slot = slot_length(duration, slot_s)
-    return _fitting(trailer, slot) if slot <= max_shot_s else []
+    if slot > max_shot_s:
+        return []
+    whole = _fitting(trailer, slot)
+    pieces = sorted((p for run in _runs(trailer) for p in _pieces(run, slot)), key=lambda p: p.score, reverse=True)
+    chosen = list(whole)
+    for piece in pieces:
+        if not any(_overlaps(piece, taken) for taken in chosen):
+            chosen.append(piece)
+    return chosen
 
 
 def _overlay_for(index: int, cards: list[Card]) -> Path | None:
@@ -75,8 +109,8 @@ def plan_timeline(
 ) -> list[TimelineItem]:
     """Equal slots, each with a background; video backgrounds sometimes get a text panel over them.
 
-    Backgrounds: a fresh trailer shot on even slots while the trailer budget allows, else stock
-    footage (licensed, so it may repeat), else a screenshot, else a card full screen.
+    Backgrounds: a fresh trailer shot on even slots while the trailer budget allows, else a screenshot
+    of the story's own game, else stock footage (licensed, so it may repeat), else a card full screen.
     """
     count = ceil(duration / slot_s)
     slot = duration / count
@@ -91,11 +125,11 @@ def plan_timeline(
             chosen = unused.pop(0)
             used += slot
             background = TimelineItem("shot", slot, replace(chosen, end=chosen.start + slot), None)
+        elif stills:
+            background = TimelineItem("image", slot, None, stills[i % len(stills)])
         elif stock:
             chosen = stock[i % len(stock)]
             background = TimelineItem("shot", slot, replace(chosen, end=chosen.start + slot), None)
-        elif stills:
-            background = TimelineItem("image", slot, None, stills[i % len(stills)])
         elif cards:
             items.append(TimelineItem("image", slot, None, _full_card(shown, cards)))
             shown += 1

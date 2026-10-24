@@ -45,6 +45,7 @@ _STOCK_ERRORS = (httpx.HTTPError, ValueError, OSError, FFmpegError, DownloadTooL
 # when the script suggests no search terms of its own
 DEFAULT_FOOTAGE_QUERIES = ("computer hardware", "gaming setup", "circuit board closeup")
 STOCK_TAIL_S = 0.3
+MIN_SCENE_S = 0.4
 
 
 class PipelineError(Exception):
@@ -186,7 +187,9 @@ def _stock_assets(draft: ScriptDraft, job: _Job) -> list[Asset]:
     return assets
 
 
-def _no_footage_reason(settings: Settings) -> str:
+def _no_footage_reason(settings: Settings, game: bool) -> str:
+    if game:
+        return "no footage for this game: no usable trailer scenes or screenshots (game news never uses stock video)"
     sites = " or ".join(source.name for source, _ in _stock_sources(settings))
     if sites:
         return f"no footage for this story: no game trailer or screenshots, and {sites} had no usable stock video"
@@ -222,17 +225,17 @@ def _cards(draft: ScriptDraft, article: Article, job: _Job) -> list[Asset]:
 
 
 def _gather_visuals(draft: ScriptDraft, article: Article, job: _Job, duration: float) -> _Visuals:
-    """Game footage first; stock video when the game footage cannot fill the video on its own."""
+    """Game news: only the game's own trailer and screenshots. Other news: licensed stock video."""
     blocked = BlocklistRepository(job.conn).names()
     video = job.settings.video
     steam = _log_usable(_steam_assets(job, blocked), blocked, job)
     trailer = usable_trailer_shots(_trailer_shots(steam), duration, slot_s=video.slot_s, max_shot_s=video.max_shot_s)
     stills = _stills(steam, job)
-    # with both, trailer and screenshots fill the video; generic stock would only dilute game news
-    stock_assets = [] if trailer and stills else _log_usable(_stock_assets(draft, job), blocked, job)
+    # game news shows only the game's own footage: generic stock put a motherboard in a cat game's video
+    stock_assets = [] if job.steam_app_id else _log_usable(_stock_assets(draft, job), blocked, job)
     stock = _stock_shots(stock_assets, video.slot_s)
     if not (trailer or stock or stills):
-        raise ValueError(_no_footage_reason(job.settings))
+        raise ValueError(_no_footage_reason(job.settings, job.steam_app_id is not None))
     music = pick_music(job.settings.music_dir, random.Random(job.video_id))
     rest = _log_usable(_cards(draft, article, job) + ([music] if music else []), blocked, job)
     return _Visuals(steam + stock_assets + rest, trailer, stock, stills)
@@ -270,7 +273,9 @@ def _stills(assets: list[Asset], job: _Job) -> list[Path]:
 
 
 def _trailer_shots(assets: list[Asset]) -> list[Shot]:
-    shots = [shot for a in assets if a.kind == AssetKind.TRAILER for shot in detect_shots(a.local_path, a.id)]
+    # short scenes too: back to back they make continuous pieces of a fast-cut trailer
+    shots = [shot for a in assets if a.kind == AssetKind.TRAILER
+             for shot in detect_shots(a.local_path, a.id, min_len_s=MIN_SCENE_S)]
     return sorted(shots, key=lambda s: s.score, reverse=True)
 
 

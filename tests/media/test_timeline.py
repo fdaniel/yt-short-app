@@ -95,3 +95,35 @@ def test_trailer_without_anything_for_the_other_slots_raises():
 def test_nothing_to_show_raises():
     with pytest.raises(TimelineError, match="no visuals"):
         plan(30.0, cards=[])
+
+
+def test_game_screenshots_come_before_generic_stock():
+    # a cat game must show the game, not a stock motherboard
+    items = plan(30.0, stock=[shot(i, name="s") for i in range(10)], stills=[Path("a.jpg"), Path("b.jpg")])
+    assert {i.kind for i in items} == {"image"}
+
+
+def fast_cuts(start=10.0, count=12, length=1.5, gap=0.0):
+    """A fast-cut trailer: back-to-back scenes, each shorter than a slot."""
+    return [Shot(Path("t.mp4"), 1, start + i * (length + gap), start + i * (length + gap) + length, 1.0)
+            for i in range(count)]
+
+
+def test_fast_cut_trailer_is_used_in_continuous_pieces():
+    items = plan(30.0, trailer=fast_cuts(), stills=[Path("a.jpg")])
+    trailer = [i for i in items if i.kind == "shot"]
+    assert trailer, "a fast-cut trailer must still give moving footage"
+    assert all(i.shot.end - i.shot.start <= KW["max_shot_s"] + 1e-6 for i in trailer)
+    assert sum(i.duration for i in trailer) <= KW["max_trailer_share"] * 30.0 + 1e-6
+
+
+def test_pieces_never_overlap():
+    items = plan(30.0, trailer=fast_cuts(count=30), stills=[Path("a.jpg")])
+    spans = sorted((i.shot.start, i.shot.end) for i in items if i.kind == "shot")
+    assert all(a_end <= b_start + 1e-6 for (_, a_end), (b_start, _) in zip(spans, spans[1:]))
+
+
+def test_scenes_with_a_gap_between_are_not_joined():
+    # a skipped dark or too-short scene sits in the gap: never bridge over it
+    items = plan(30.0, trailer=fast_cuts(gap=0.5), stills=[Path("a.jpg")])
+    assert {i.kind for i in items} == {"image"}
