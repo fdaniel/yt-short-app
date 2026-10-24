@@ -35,6 +35,10 @@ _UNITS = {
 # a name in capitals ("LANCARSE", "CAPCOM'S"): long enough and with enough vowels to be a word, not an acronym
 _CAPS_WORD = re.compile(r"\b([A-Z]{5,})('S)?\b")
 _ROMAN = re.compile(r"[IVXLCDM]+")
+# European prices ("€29,99", "29,99 €"): the engine takes the comma for thousands and says "two thousand nine hundred..."
+_PRICE_BEFORE = re.compile(r"([€£$])(\d{1,3}),(\d{2})(?![\d,])")
+_PRICE_AFTER = re.compile(r"(?<![\d.,])(\d{1,3}),(\d{2})\s?(€)")
+_CURRENCIES = {"€": "euros", "£": "pounds", "$": "dollars"}
 _SOUND = re.compile(r"\b(" + "|".join(_SOUNDS) + r")('s)?\b", re.IGNORECASE)
 _UNIT = re.compile(r"(\d)\s?(" + "|".join(sorted(_UNITS, key=len, reverse=True)) + r")\b(\s+(\w+))?")
 
@@ -43,6 +47,11 @@ def _sound(match: re.Match) -> str:
     word, possessive = match.group(1), match.group(2) or ""
     phonemes = _SOUNDS[word.lower()] + (_POSSESSIVE if possessive else "")
     return f"[{word}{possessive}](/{phonemes}/)"
+
+
+def _price(symbol: str, whole: str, cents: str) -> str:
+    """Said the way people say a price: "29 euros 99"."""
+    return f"{whole} {_CURRENCIES[symbol]}" + ("" if cents == "00" else f" {cents}")
 
 
 def _caps_word(match: re.Match) -> str:
@@ -60,6 +69,8 @@ def _unit(match: re.Match) -> str:
 
 
 def speakable(text: str) -> str:
+    text = _PRICE_BEFORE.sub(lambda m: _price(m.group(1), m.group(2), m.group(3)), text)
+    text = _PRICE_AFTER.sub(lambda m: _price(m.group(3), m.group(1), m.group(2)), text)
     text = _CAPS_WORD.sub(_caps_word, text)
     text = _SOUND.sub(_sound, text)
     for pattern, spoken in _WORDS.items():
