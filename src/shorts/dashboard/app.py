@@ -7,7 +7,7 @@ import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -32,6 +32,9 @@ MAX_VIDEOS = 300
 RUN_LOG_TAIL_BYTES = 64 * 1024
 RUN_LOG_LINES = 8
 _RUN_LOGGERS = (" shorts.auto_cli: ", " shorts.discovery.runner: ")
+# YouTube needs time to process the upload first; scheduling further out than this is almost surely a typo
+SCHEDULE_MIN_AHEAD = timedelta(minutes=15)
+SCHEDULE_MAX_AHEAD = timedelta(days=60)
 
 
 def _already(video_id: int, status: VideoStatus) -> str:
@@ -68,6 +71,7 @@ class DashboardView:
     channel: Channel | None
     run_lines: tuple[str, ...]
     privacy: str = "public"
+    can_schedule: bool = False
 
 
 def _load_meta(path: Path | None) -> dict[str, Any]:
@@ -127,6 +131,7 @@ class Dashboard:
             channel=self._account.channel(),
             run_lines=_run_lines(self._settings.data_dir / "run.log"),
             privacy=self._settings.youtube.privacy_status,
+            can_schedule=self._settings.youtube.audit_approved,
         )
 
     def _card(self, record: VideoRecord, topics: TopicRepository) -> VideoCard:
@@ -155,7 +160,28 @@ class Dashboard:
                 return None
 
     def upload(self, video_id: int) -> str:
-        """Upload through the YouTube API. The row is claimed first, so no click, process or crash uploads twice."""
+        """Upload through the YouTube API, public now."""
+        return self._upload(video_id, None)
+
+    def schedule(self, video_id: int, when: str) -> str:
+        """Upload now through the YouTube API; YouTube makes it public at `when` (the page's local date and time)."""
+        if not self._settings.youtube.audit_approved:
+            return (f"Video #{video_id} was not scheduled: scheduling here works once Google approves your app (the"
+                    " audit in the README). Until then, upload it by hand and pick Schedule in YouTube Studio.")
+        try:
+            publish_at = datetime.fromisoformat(when).astimezone()
+        except ValueError:
+            return f"Video #{video_id} was not scheduled: pick a date and time first."
+        ahead = publish_at - datetime.now().astimezone()
+        if ahead < SCHEDULE_MIN_AHEAD:
+            return (f"Video #{video_id} was not scheduled: pick a time at least"
+                    f" {SCHEDULE_MIN_AHEAD.seconds // 60} minutes from now.")
+        if ahead > SCHEDULE_MAX_AHEAD:
+            return f"Video #{video_id} was not scheduled: pick a time at most {SCHEDULE_MAX_AHEAD.days} days ahead."
+        return self._upload(video_id, publish_at)
+
+    def _upload(self, video_id: int, publish_at: datetime | None) -> str:
+        """The row is claimed first, so no click, process or crash uploads twice."""
         with self._publish_lock, self._db() as conn:
             repo = VideoRepository(conn)
             try:
@@ -169,13 +195,13 @@ class Dashboard:
             if not repo.claim_upload(video_id):
                 return _already(video_id, record.status)
             try:
-                result = self._account.upload(video, upload_body(meta, self._settings.youtube))
+                result = self._account.upload(video, upload_body(meta, self._settings.youtube, publish_at))
             except YouTubeError as exc:
                 log.warning("Upload of video #%d failed: %s", video_id, exc)
                 repo.set_status(video_id, VideoStatus.AWAITING_APPROVAL)
                 return f"Video #{video_id} was not uploaded: {exc}"
             link = f"https://youtube.com/shorts/{result.video_id}"
-            wanted = self._settings.youtube.privacy_status
+            wanted = "private" if publish_at else self._settings.youtube.privacy_status
             if result.privacy_status and result.privacy_status != wanted:
                 repo.set_status(video_id, VideoStatus.AWAITING_APPROVAL)
                 return (f"YouTube made video #{video_id} {result.privacy_status}, not {wanted} ({link}): until Google"
@@ -187,9 +213,14 @@ class Dashboard:
                 log.exception("Video #%d is live as %s but could not be recorded", video_id, result.video_id)
                 return (f"Video #{video_id} IS on YouTube ({link}) but the dashboard could not record it ({exc})."
                         " Do not upload it again: paste that link below and press Mark as published.")
-        log.info("Uploaded video #%d as YouTube %s (%s)", video_id, result.video_id, result.privacy_status)
+        log.info("Uploaded video #%d as YouTube %s (%s, publish at %s)", video_id, result.video_id,
+                 result.privacy_status, publish_at)
         channel = self._account.channel()
-        return f"Video #{video_id} uploaded{f' to {channel.title}' if channel else ''}: {link}"
+        to = f" to {channel.title}" if channel else ""
+        if publish_at:
+            return (f"Video #{video_id} uploaded{to} and scheduled for {publish_at:%d %b %H:%M}: {link}. YouTube Studio"
+                    " should list it as Scheduled.")
+        return f"Video #{video_id} uploaded{to}: {link}"
 
     def back_to_review(self, video_id: int) -> str:
         """After an interrupted upload the owner checked YouTube Studio and the video is not there."""

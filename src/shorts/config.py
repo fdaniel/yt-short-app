@@ -117,6 +117,8 @@ class YouTubeSettings(_Frozen):
     privacy_status: Literal["public", "unlisted", "private"] = "public"
     category_id: str = "28"  # Science & Technology
     synthetic_media: bool = False  # YouTube's "altered or synthetic content" label
+    # set to true once Google approves the YouTube API audit: before that a scheduled upload stays private forever
+    audit_approved: bool = False
 
 
 class Settings(_Frozen):

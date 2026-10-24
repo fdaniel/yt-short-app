@@ -157,3 +157,10 @@ def test_page_error_is_explained(client, server, monkeypatch):
 def test_page_lets_its_own_buttons_say_where_they_come_from(client):
     # With "no-referrer" browsers send "Origin: null" on form posts, and every button is refused.
     assert client.get("/").headers["referrer-policy"] == "same-origin"
+
+
+def test_schedule_form_is_routed(client, server, make_ready_video):
+    vid = make_ready_video()
+    page = client.post(f"/videos/{vid}/schedule", data={"token": server.token, "publish_at": "2026-10-24T13:00"},
+                       follow_redirects=True)
+    assert page.status_code == 200 and "approves" in page.text

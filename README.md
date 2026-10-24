@@ -137,6 +137,8 @@ automatic runs.
 For a video to review:
 
 - **Upload to <your channel>**: one click, once YouTube is connected (below).
+- **Schedule**: pick a date and time; the video is uploaded now and YouTube makes it public then, even if this
+  PC is off. Only once Google has approved your app (below): then set `youtube.audit_approved: true`.
 - **Upload by hand**: *Open the video folder* (or *Download video*), *Open YouTube upload*, drag the video in,
   paste the texts, then **Mark as published** (paste the YouTube link if you like).
 - **Discard**: deletes the video file (keeps its texts) to free disk space.
@@ -159,7 +161,9 @@ Free, but Google needs a few clicks. Create the channel first (youtube.com → y
 5. Run `python -m shorts youtube-connect`, sign in, **pick the channel**, allow access.
 
 **Until Google audits your app, YouTube locks API uploads as private**, so use *Upload by hand* until then. Ask for the free audit with the YouTube API Services form:
-<https://support.google.com/youtube/contact/yt_api_form>. Once approved, one-click uploads go public.
+<https://support.google.com/youtube/contact/yt_api_form>. Once approved, one-click uploads go public; add
+`youtube:` / `audit_approved: true` to `config.yaml` to turn on the Schedule button (before that, a scheduled
+video would stay private for good).
 
 The connection is stored in `~/tech-shorts-data/youtube/token.json` (readable only by you). Delete that folder's
 `token.json` to disconnect.

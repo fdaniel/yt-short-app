@@ -78,3 +78,16 @@ def test_upload_button_links_youtube_terms_and_guidelines(settings, make_ready_v
     html = _html(settings)
     assert 'href="https://www.youtube.com/t/terms"' in html
     assert 'href="https://www.youtube.com/howyoutubeworks/policies/community-guidelines/"' in html
+
+
+def test_schedule_form_once_google_approved_the_app(settings, make_ready_video):
+    make_ready_video()
+    approved = settings.model_copy(update={"youtube": settings.youtube.model_copy(update={"audit_approved": True})})
+    html = _html(approved)
+    assert 'type="datetime-local" name="publish_at"' in html and ">Schedule</button>" in html
+
+
+def test_schedule_explains_it_waits_for_google(settings, make_ready_video):
+    make_ready_video()
+    html = _html(settings)
+    assert 'name="publish_at"' not in html and "Scheduling here works once Google approves" in html
