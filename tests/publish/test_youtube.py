@@ -1,11 +1,13 @@
 import json
 import stat
+import webbrowser
 
 import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
 from shorts.config import YouTubeSettings
+from shorts.publish import youtube
 from shorts.publish.youtube import (
     NotConnected,
     UploadResult,
@@ -218,3 +220,12 @@ def test_description_limit_is_in_bytes():
 def test_body_survives_odd_metadata():
     snippet = upload_body({"title": "<>"}, YouTubeSettings())["snippet"]
     assert snippet["title"] and snippet["description"] == "" and snippet["tags"] == []
+
+
+
+def test_sign_in_link_goes_to_the_windows_url_handler(monkeypatch):
+    # explorer.exe drops long links with "&" in them and opens the Documents folder instead
+    monkeypatch.setattr(youtube.shutil, "which", lambda name: f"/mnt/c/Windows/System32/{name}")
+    youtube._use_windows_browser()
+    browser = webbrowser.get("windows")
+    assert [browser.name, *browser.args] == ["rundll32.exe", "url.dll,FileProtocolHandler", "%s"]

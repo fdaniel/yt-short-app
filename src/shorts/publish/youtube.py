@@ -91,9 +91,13 @@ def upload_body(meta: dict[str, Any], settings: YouTubeSettings) -> dict[str, An
 
 
 def _use_windows_browser() -> None:
-    """Inside WSL there is no Linux browser: hand links to Windows instead."""
-    if shutil.which("explorer.exe"):
-        webbrowser.register("windows", None, webbrowser.GenericBrowser("explorer.exe"), preferred=True)
+    """Inside WSL there is no Linux browser: hand links to Windows instead.
+
+    Windows' URL handler, not explorer.exe: explorer drops long links with "&" in them and opens Documents.
+    """
+    if shutil.which("rundll32.exe"):
+        browser = webbrowser.GenericBrowser(["rundll32.exe", "url.dll,FileProtocolHandler", "%s"])
+        webbrowser.register("windows", None, browser, preferred=True)
 
 
 def _authorize(secrets_path: Path) -> Credentials:
