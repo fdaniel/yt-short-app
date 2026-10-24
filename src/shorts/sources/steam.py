@@ -19,8 +19,8 @@ log = logging.getLogger(__name__)
 APPDETAILS_URL = "https://store.steampowered.com/api/appdetails?appids={app_id}&cc=us&l=english"
 SEARCH_URL = "https://store.steampowered.com/api/storesearch/"
 SEARCH_MAX_BYTES = 1_000_000
-MAX_TRAILERS = 2
-MAX_SCREENSHOTS = 4
+MAX_TRAILERS = 3
+MAX_SCREENSHOTS = 12  # enough that a video never has to show the same picture twice
 TRAILER_TERMS = "steam-store-promo: short news-coverage excerpts (owner decision, option A)"
 SCREENSHOT_TERMS = "steam-store-promo: store screenshot used in news coverage"
 _DOWNLOAD_ERRORS = (httpx.HTTPError, DownloadTooLarge, UnsafeURLError, FFmpegError, OSError)

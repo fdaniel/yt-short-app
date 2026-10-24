@@ -134,3 +134,33 @@ def test_scenes_with_a_gap_between_are_not_joined():
     # a skipped dark or too-short scene sits in the gap: never bridge over it
     items = plan(30.0, trailer=fast_cuts(gap=0.5), stills=[Path("a.jpg")])
     assert {i.kind for i in items} == {"image"}
+
+
+def test_every_screenshot_is_shown_before_any_repeats():
+    stills = [Path(f"{n}.jpg") for n in "abcdef"]
+    items = plan(40.0, stills=stills)
+    shown = [i.image.name for i in items if i.kind == "image"]
+    assert shown[:6] == [f"{n}.jpg" for n in "abcdef"]
+
+
+def test_screenshots_between_trailer_shots_do_not_repeat_while_unused_ones_remain():
+    # Crimson Desert: 4 screenshots on every other slot showed #2, #4, #2, #4 and never #1 or #3
+    stills = [Path(f"{n}.jpg") for n in "abcd"]
+    items = plan(40.0, trailer=[shot(i) for i in range(10)], stills=stills)
+    shown = [i.image.name for i in items if i.kind == "image"]
+    assert sorted(shown[:4]) == ["a.jpg", "b.jpg", "c.jpg", "d.jpg"]
+
+
+def test_stock_clips_between_trailer_shots_are_all_used_before_any_repeats():
+    items = plan(40.0, trailer=[shot(i) for i in range(10)], stock=[shot(i, name="s") for i in range(4)])
+    used = [i.shot.source.name for i in items if i.shot.source.name.startswith("s")]
+    assert len(set(used[:4])) == 4
+
+
+def test_trailer_pieces_come_from_different_moments_of_the_trailer():
+    # one long stretch of back-to-back scenes: the picks must spread out, not sit side by side
+    run = [Shot(Path("t.mp4"), 1, 10.0 + i * 1.5, 11.5 + i * 1.5, float(i)) for i in range(40)]
+    items = plan(30.0, trailer=run, stills=[Path(f"{n}.jpg") for n in "abcdefgh"])
+    starts = sorted(i.shot.start for i in items if i.kind == "shot")
+    slot = items[0].duration
+    assert all(b - a >= 2 * slot - 1e-6 for a, b in zip(starts, starts[1:]))

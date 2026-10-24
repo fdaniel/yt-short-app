@@ -10,6 +10,7 @@ from shorts.media.shots import Shot
 
 _EPSILON = 1e-6  # clips cut to exactly one slot can come out a hair short in floating point
 ADJACENT_S = 0.15  # scenes this close are back to back: the trailer's own cut, nothing skipped between
+SPREAD_SLOTS = 1  # trailer pieces picked first are at least this many slots apart
 OVERLAY_EVERY = 3  # after the hook, a text panel on every third slot: the footage stays the star
 
 
@@ -57,8 +58,9 @@ def _pieces(run: Shot, slot: float) -> list[Shot]:
     return [replace(run, start=run.start + k * slot, end=run.start + (k + 1) * slot) for k in range(count)]
 
 
-def _overlaps(a: Shot, b: Shot) -> bool:
-    return a.source == b.source and a.start < b.end - _EPSILON and b.start < a.end - _EPSILON
+def _near(a: Shot, b: Shot, gap: float) -> bool:
+    """Overlapping, or closer than `gap` seconds apart in the same trailer."""
+    return a.source == b.source and a.start < b.end + gap - _EPSILON and b.start < a.end + gap - _EPSILON
 
 
 def usable_trailer_shots(trailer: list[Shot], duration: float, *, slot_s: float, max_shot_s: float) -> list[Shot]:
@@ -73,9 +75,11 @@ def usable_trailer_shots(trailer: list[Shot], duration: float, *, slot_s: float,
     whole = sorted(_fitting(trailer, slot), key=lambda s: s.score, reverse=True)  # the liveliest opens the video
     pieces = sorted((p for run in _runs(trailer) for p in _pieces(run, slot)), key=lambda p: p.score, reverse=True)
     chosen = list(whole)
-    for piece in pieces:
-        if not any(_overlaps(piece, taken) for taken in chosen):
-            chosen.append(piece)
+    # first pieces from different moments of the trailer, then the rest: side-by-side picks looked like a loop
+    for gap in (SPREAD_SLOTS * slot, 0.0):
+        for piece in pieces:
+            if piece not in chosen and not any(_near(piece, taken, gap) for taken in chosen):
+                chosen.append(piece)
     return chosen
 
 
@@ -123,6 +127,7 @@ def plan_timeline(
     stock = _fitting(stock, slot)
     used = 0.0
     shown = 0  # full-screen cards shown so far
+    stills_shown = stock_shown = 0  # each in turn: all of them before any repeats
     items: list[TimelineItem] = []
     for i in range(count):
         if i % 2 == 0 and unused and used + slot <= budget:
@@ -130,9 +135,11 @@ def plan_timeline(
             used += slot
             background = TimelineItem("shot", slot, replace(chosen, end=chosen.start + slot), None)
         elif stills:
-            background = TimelineItem("image", slot, None, stills[i % len(stills)])
+            background = TimelineItem("image", slot, None, stills[stills_shown % len(stills)])
+            stills_shown += 1
         elif stock:
-            chosen = stock[i % len(stock)]
+            chosen = stock[stock_shown % len(stock)]
+            stock_shown += 1
             background = TimelineItem("shot", slot, replace(chosen, end=chosen.start + slot), None)
         elif cards:
             items.append(TimelineItem("image", slot, None, _full_card(shown, cards)))
