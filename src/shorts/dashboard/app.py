@@ -191,8 +191,8 @@ class Dashboard:
                 self._remaking.add(video_id)
                 self._take_notes.pop(video_id, None)
         self._background(lambda: self._run_take(video_id, take))
-        return (f"Video #{video_id} is being re-made with your take; it takes a minute or two. Reload this page,"
-                " then watch it again before publishing.")
+        return (f"Video #{video_id} is being re-made with your take; it takes several minutes (up to 15). Reload this page"
+                " later, then watch it again before publishing.")
 
     def _run_take(self, video_id: int, take: str) -> None:
         from shorts.pipeline import PipelineError  # the video-making stack loads only when a take is added

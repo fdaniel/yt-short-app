@@ -136,7 +136,7 @@ def _review_actions(card: VideoCard, view: DashboardView, token: str) -> str:
     vid, tab = card.record.id, view.tab
     if card.take_busy:
         return ('<p class="muted">Adding your take: the video is being voiced and rendered again, which takes a'
-                " minute or two. Reload this page to check.</p>")
+                " minutes (up to 15). Reload this page to check.</p>")
     if view.channel:
         auto = _form(vid, "upload", token, tab,
                      f'<button class="primary">Upload to {escape(view.channel.title)}</button>',
