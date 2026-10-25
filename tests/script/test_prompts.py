@@ -78,3 +78,8 @@ def test_hook_must_name_the_game_or_product():
 def test_hook_leads_with_the_most_striking_fact_not_availability():
     p = build_script_prompt(article(), VideoFormat.NEWS_FLASH, [], VideoSettings())
     assert "most striking concrete fact" in p and "not just that it is out" in p
+
+
+def test_script_prompt_asks_for_take_suggestions_without_new_facts():
+    prompt = build_script_prompt(article(), VideoFormat.NEWS_FLASH, [], VideoSettings())
+    assert "take_options" in prompt and "no numbers" in prompt

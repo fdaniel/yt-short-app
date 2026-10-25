@@ -1,11 +1,16 @@
 """Structured LLM outputs for scripts and fact checks."""
 
+import re
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from shorts.script.take import TakeError, clean_take
 
 MAX_FOOTAGE_QUERIES = 4
 MAX_QUERY_CHARS = 40
 MAX_GAMES_NAMED = 3
 MAX_GAME_NAME_CHARS = 80
+MAX_TAKE_OPTIONS = 3
 
 
 class _Frozen(BaseModel):
@@ -34,6 +39,8 @@ class ScriptDraft(_Frozen):
     footage_queries: list[str] = Field(default_factory=list)
     games_named: list[str] = Field(default_factory=list)
     subject: str = ""  # the one game, platform or product the Short is about
+    # opinions the owner may pick from for their own closing line; never voiced unless they choose one
+    take_options: list[str] = Field(default_factory=list)
 
     @field_validator("footage_queries", mode="before")
     @classmethod
@@ -52,6 +59,23 @@ class ScriptDraft(_Frozen):
             return []
         tidy = [" ".join(n.split()) for n in names if isinstance(n, str)]
         return [n for n in tidy if 0 < len(n) <= MAX_GAME_NAME_CHARS][:MAX_GAMES_NAMED]
+
+
+    @field_validator("take_options", mode="before")
+    @classmethod
+    def _tidy_takes(cls, options: object) -> list[str]:
+        """Only suggestions, so unusable ones are dropped; one with a number could state an unchecked fact."""
+        if not isinstance(options, list):
+            return []
+        tidy = []
+        for option in options:
+            try:
+                take = clean_take(option) if isinstance(option, str) and not re.search(r"\d", option) else None
+            except TakeError:
+                take = None
+            if take and take not in tidy:
+                tidy.append(take)
+        return tidy[:MAX_TAKE_OPTIONS]
 
 
 class ClaimVerdict(_Frozen):

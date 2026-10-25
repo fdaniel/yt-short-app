@@ -67,6 +67,9 @@ Rules:
   (the kind of product, its use, its setting), generic objects or scenes only: no brand or product names,
   no people. Never use terms that have nothing to do with this story.
 - subject: the game, platform, service or product this Short is about, as the hook names it.
+- take_options: 3 short opinions (4 to 10 words each) a gamer might give about this news, each from a different
+  angle (e.g. grab it now, who it suits or not, wait and see). Opinions only: no numbers, no new facts, and no
+  other game unless the SOURCE names it. The channel owner picks one only if they agree.
 - games_named: the video games your narration names, the hook's game first, up to 3, each title copied
   exactly as the SOURCE writes it; [] if it names none. Never a feature, mode, map, update or product name,
   and an expansion or DLC is not a separate game.

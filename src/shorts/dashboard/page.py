@@ -54,6 +54,7 @@ button, .button { font:inherit; font-size:14px; padding:7px 14px; border-radius:
 button.primary { background:var(--accent); color:var(--accent-text); border-color:var(--accent); }
 button.danger { color:var(--danger); border-color:var(--danger); }
 button.copy { font-size:12px; padding:2px 8px; margin-left:6px; }
+button.suggest { font-size:13px; padding:4px 10px; border-radius:999px; }
 form { margin:0; }
 .steps { border-top:1px solid var(--line); margin-top:16px; padding-top:8px; }
 .steps ol { margin:6px 0; padding-left:20px; }
@@ -73,6 +74,12 @@ document.addEventListener('click', async (e) => {
   try { await navigator.clipboard.writeText(field.value); }
   catch { field.select(); document.execCommand('copy'); }
   button.textContent = 'Copied'; setTimeout(() => { button.textContent = 'Copy'; }, 1500);
+});
+document.addEventListener('click', (e) => {
+  const button = e.target.closest('button.suggest');
+  if (!button) return;
+  const field = document.getElementById(button.dataset.target);
+  field.value = button.dataset.text; field.focus();
 });
 document.addEventListener('submit', (e) => {
   const question = e.target.dataset.confirm;
@@ -129,6 +136,11 @@ def _take(card: VideoCard, view: DashboardView, token: str) -> str:
                  " It replaces the closing line and the video is made again.</label>"
                  f'<span class="row"><input type="text" id="take-{vid}" name="take" maxlength="120"'
                  ' placeholder="Worth it if you liked Hades" required><button>Add my take</button></span>')
+    if card.take_options:
+        chips = "".join(f'<button type="button" class="suggest" data-target="take-{vid}" data-text="{escape(option)}">'
+                        f"{escape(option)}</button>" for option in card.take_options)
+        form += ('<p class="muted">Suggestions (click one to fill the box, then edit it if you like). Pick one only if'
+                 f' you agree: it should be your opinion.</p><div class="row">{chips}</div>')
     return shown + note + form
 
 

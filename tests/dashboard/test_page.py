@@ -125,3 +125,27 @@ def test_card_shows_how_the_last_take_went_and_the_take_itself(settings, make_re
 def test_no_take_form_without_a_remaker(settings, make_ready_video):
     vid = make_ready_video()
     assert f'action="/videos/{vid}/take"' not in _html(settings)
+
+
+def test_take_suggestions_fill_the_box_and_are_escaped(settings, make_ready_video):
+    import json
+
+    from shorts.storage.db import connect
+    from shorts.storage.repositories import VideoRepository
+    from tests.script.drafts import draft
+
+    vid = make_ready_video()
+    script = draft(take_options=["Worth grabbing while it's free", 'Fun with "friends" <b>only</b>'])
+    conn = connect(settings.data_dir / "shorts.db")
+    VideoRepository(conn).save_script(vid, script.model_dump_json(), "RTX 5090 announced")
+    conn.close()
+    html = _take_html(settings, Dashboard(settings, FakeAccount(), opener=print, remake=lambda *_: None))
+    assert f'data-target="take-{vid}"' in html and 'data-text="Worth grabbing while it&#x27;s free."' in html
+    assert "<b>only</b>" not in html and "Fun with &quot;friends&quot; bonly/b." in html
+    assert "Pick one only if you agree" in html
+
+
+def test_no_suggestions_for_older_scripts(settings, make_ready_video):
+    make_ready_video()  # its script is "{}"
+    html = _take_html(settings, Dashboard(settings, FakeAccount(), opener=print, remake=lambda *_: None))
+    assert 'class="suggest"' not in html

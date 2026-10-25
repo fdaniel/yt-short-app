@@ -23,3 +23,18 @@ def test_unusable_takes_say_why(text, why):
 
 def test_angle_brackets_never_reach_the_video():
     assert clean_take("Best <b>horror</b> deal this week") == "Best bhorror/b deal this week."
+
+
+def test_suggested_takes_keep_only_usable_ones_without_numbers():
+    from tests.script.drafts import draft
+
+    d = draft(take_options=["  worth grabbing while it's free ", "Only 5 dollars, buy it", "see www.x.com",
+                            "Yes", "Fun with friends, skip it solo!", "Wait for reviews first", "One too many"])
+    assert d.take_options == ["worth grabbing while it's free.", "Fun with friends, skip it solo!",
+                              "Wait for reviews first."]
+
+
+def test_a_script_without_suggestions_is_fine():
+    from tests.script.drafts import draft
+
+    assert draft().take_options == [] and draft(take_options="nonsense").take_options == []

@@ -62,6 +62,7 @@ class VideoCard:
     explanation: str = ""
     take_busy: bool = False  # the owner's take is being voiced into a new render
     take_note: str = ""  # how the last take went
+    take_options: tuple[str, ...] = ()  # the AI's suggestions, for the owner to pick from only if they agree
 
 
 @dataclass(frozen=True)
@@ -85,6 +86,16 @@ def _load_meta(path: Path | None) -> dict[str, Any]:
     except (OSError, ValueError):
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def _take_options(script_json: str | None) -> tuple[str, ...]:
+    """The script's take suggestions; none for older scripts or damaged JSON."""
+    from shorts.script.schema import ScriptDraft
+
+    try:
+        return tuple(ScriptDraft.model_validate_json(script_json).take_options) if script_json else ()
+    except ValueError:
+        return ()
 
 
 def _run_lines(log_path: Path) -> tuple[str, ...]:
@@ -161,6 +172,7 @@ class Dashboard:
             explanation=topic["explanation"] if topic else "",
             take_busy=self._busy(record.id),
             take_note=self._take_notes.get(record.id, ""),
+            take_options=_take_options(record.script_json) if record.status == VideoStatus.AWAITING_APPROVAL else (),
         )
 
     def _busy(self, video_id: int) -> bool:
