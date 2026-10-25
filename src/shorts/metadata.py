@@ -60,6 +60,8 @@ def _credits(article: Article, assets: list[Asset]) -> list[str]:
     media = [a for a in assets if a.kind in (AssetKind.TRAILER, AssetKind.SCREENSHOT)]
     for holder, platform in dict.fromkeys((a.rightsholder, a.source_platform) for a in media):
         lines.append(f"Footage: {_clean(holder)} ({platform})")
+    lines += [f"Images: {_clean(holder)} ({platform})" for holder, platform in
+              dict.fromkeys((a.rightsholder, a.source_platform) for a in assets if a.kind == AssetKind.PRESS_IMAGE)]
     lines += [f"Stock footage: {_clean(a.rightsholder)} via {a.source_platform.capitalize()} ({a.source_url})"
               for a in assets if a.kind == AssetKind.STOCK_VIDEO]
     lines += [f"Music: {_clean(a.notes)}" for a in assets if a.kind == AssetKind.MUSIC]

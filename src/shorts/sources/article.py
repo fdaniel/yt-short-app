@@ -30,6 +30,7 @@ class Article:
     title: str
     text: str
     domain: str
+    html: str = ""  # the page (or the feed's own text) it came from: its photos are the story's footage
 
 
 def _prose_chars(text: str) -> int:
@@ -52,7 +53,7 @@ def extract_article(url: str, html: str) -> Article:
     title = " ".join(_TAG.sub("", html_lib.unescape(raw_title)).split())
     # "[Notices] Headline | Site Name": the labels are the website's, not part of the news
     title = _SITE_SUFFIX.sub("", _LABEL_PREFIX.sub("", title)).strip()
-    return Article(url=url, title=title, text=text, domain=urlparse(url).hostname or "")
+    return Article(url=url, title=title, text=text, domain=urlparse(url).hostname or "", html=html)
 
 
 def fetch_article(client: httpx.Client, url: str, *, max_bytes: int) -> Article:

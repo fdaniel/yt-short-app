@@ -57,8 +57,9 @@ def build_triage_prompt(items: list[FeedItem], recent_titles: list[str] | tuple[
     )
     recent = "\n".join(f"- {t}" for t in list(recent_titles)[:MAX_RECENT_TITLES]) or "- (none yet)"
     formats = ", ".join(f.value for f in VideoFormat)
-    return f"""You pick stories for a YouTube Shorts channel about PC hardware and video games
-(NVIDIA, AMD, new games, trailers, release dates). Viewers are gamers and PC enthusiasts.
+    return f"""You pick stories for a YouTube Shorts channel about consumer tech and video games
+(phones, PCs, graphics cards, consoles, gadgets, new games, trailers, release dates).
+Viewers are gamers and tech enthusiasts.
 
 For EVERY story below return one verdict with:
 - index: the number in brackets
@@ -66,7 +67,8 @@ For EVERY story below return one verdict with:
   (launches, release dates, prices, specs, big game announcements score high;
   business deals, finance, executives, events, podcasts and regional promos score low)
 - rumour_or_leak: true if the story is about rumours, leaks or unconfirmed information
-- on_topic: true only for PC hardware, gaming hardware or video games
+- on_topic: true only for consumer tech (phones, PCs and their parts, consoles, gadgets, apps people
+  use) or video games; not for business, enterprise or data-centre technology
 - same_story_as_recent: true if the story is about the same announcement or event as one of the
   RECENTLY COVERED titles, even when worded differently
 - game_title: if the story is about ONE specific video game, its full official title exactly as written

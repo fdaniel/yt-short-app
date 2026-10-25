@@ -115,7 +115,9 @@ def _rank(batch: list[FeedItem], items: list[FeedItem], recent: list[str], setti
     for index, verdict in triage(batch, deps.llm, recent).items():
         it = batch[index]
         steam_id = _steam_id(it, verdict.game_title, deps)
-        scored = score_topic(it, verdict, footage=steam_id is not None, coverage=coverage(it, items, d),
+        # tech news shows the official article's own photos, game news its Steam trailer and screenshots
+        footage = steam_id is not None or it.topic == "hardware"
+        scored = score_topic(it, verdict, footage=footage, coverage=coverage(it, items, d),
                              settings=d, now=now)
         if scored.score < d.min_score:
             topics.record(it.url, it.source, it.title, it.published, TopicStatus.SKIPPED, scored.score,
@@ -126,12 +128,26 @@ def _rank(batch: list[FeedItem], items: list[FeedItem], recent: list[str], setti
     return ranked
 
 
+def _next_pick(pending: list, games: int, others: int):
+    """The best story of the kind (game or tech) with fewer videos today, so the channel mixes both;
+    the best of any kind when the two are even or the other kind has nothing worth a video."""
+    if games != others:
+        wanted = next((pair for pair in pending if (pair[1] is not None) == (games < others)), None)
+        if wanted:
+            return wanted
+    return pending[0]
+
+
 def _make_best(ranked, settings, deps, conn, topics, today, make, considered) -> RunReport:
     d = settings.discovery
     made: list[VideoResult] = []
-    for scored, steam_id in ranked[: d.max_attempts_per_run]:
+    pending = list(ranked[: d.max_attempts_per_run])
+    games, others = topics.videos_made_on(today, game=True), topics.videos_made_on(today, game=False)
+    while pending:
         if len(made) >= d.videos_per_run or topics.videos_made_on(today) >= d.max_videos_per_day:
             break
+        scored, steam_id = pick = _next_pick(pending, games, others)
+        pending.remove(pick)
         it = scored.item
         topic_id = topics.record(it.url, it.source, it.title, it.published, TopicStatus.PICKED, scored.score,
                                  scored.explanation)
@@ -146,4 +162,5 @@ def _make_best(ranked, settings, deps, conn, topics, today, make, considered) ->
             continue
         topics.link_video(topic_id, result.video_id, TopicStatus.MADE)
         made.append(result)
+        games, others = (games + 1, others) if steam_id is not None else (games, others + 1)
     return RunReport(tuple(made), None if made else "every picked story failed", considered)

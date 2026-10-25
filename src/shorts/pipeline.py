@@ -30,6 +30,7 @@ from shorts.script.schema import ScriptDraft
 from shorts.script.writer import write_checked_script
 from shorts.sources import pexels, pixabay
 from shorts.sources.article import Article, fetch_article
+from shorts.sources.press import collect_press_images
 from shorts.sources.stock import MAX_CLIPS, StockSource, collect_stock_assets
 from shorts.sources.steam import SteamError, collect_steam_assets, fetch_steam_app
 from shorts.text import clean_text
@@ -46,6 +47,7 @@ _STOCK_ERRORS = (httpx.HTTPError, ValueError, OSError, FFmpegError, DownloadTooL
 DEFAULT_FOOTAGE_QUERIES = ("computer hardware", "gaming setup", "circuit board closeup")
 STOCK_TAIL_S = 0.3
 MIN_SCENE_S = 0.4
+MIN_PRESS_IMAGES = 4  # fewer official photos than this: licensed stock video fills in
 
 
 class PipelineError(Exception):
@@ -187,13 +189,23 @@ def _stock_assets(draft: ScriptDraft, job: _Job) -> list[Asset]:
     return assets
 
 
+def _press_assets(article: Article, job: _Job) -> list[Asset]:
+    if job.steam_app_id is not None or not article.html:
+        return []
+    try:
+        return collect_press_images(job.deps.http, article.url, article.html, job.work / "press", job.settings)
+    except (ValueError, OSError) as exc:
+        log.warning("Newsroom photos unavailable for %s: %s", article.url, exc)
+        return []
+
+
 def _no_footage_reason(settings: Settings, game: bool) -> str:
     if game:
         return "no footage for this game: no usable trailer scenes or screenshots (game news never uses stock video)"
     sites = " or ".join(source.name for source, _ in _stock_sources(settings))
     if sites:
-        return f"no footage for this story: no game trailer or screenshots, and {sites} had no usable stock video"
-    return "no footage for this story: no game trailer or screenshots (add PIXABAY_API_KEY to .env for stock video)"
+        return f"no footage for this story: no photos in the official article, and {sites} had no usable stock video"
+    return "no footage for this story: no photos in the official article (add PIXABAY_API_KEY to .env for stock video)"
 
 
 def _overlay_path(card: Path) -> Path:
@@ -225,20 +237,23 @@ def _cards(draft: ScriptDraft, article: Article, job: _Job) -> list[Asset]:
 
 
 def _gather_visuals(draft: ScriptDraft, article: Article, job: _Job, duration: float) -> _Visuals:
-    """Game news: only the game's own trailer and screenshots. Other news: licensed stock video."""
+    """Game news: only the game's own trailer and screenshots. Other news: the official article's own
+    photos, with licensed stock video only when it has too few."""
     blocked = BlocklistRepository(job.conn).names()
     video = job.settings.video
     steam = _log_usable(_steam_assets(job, blocked), blocked, job)
     trailer = usable_trailer_shots(_trailer_shots(steam), duration, slot_s=video.slot_s, max_shot_s=video.max_shot_s)
-    stills = _stills(steam, job)
+    press = _log_usable(_press_assets(article, job), blocked, job)
+    stills = _stills(steam + press, job)
     # game news shows only the game's own footage: generic stock put a motherboard in a cat game's video
-    stock_assets = [] if job.steam_app_id else _log_usable(_stock_assets(draft, job), blocked, job)
+    wants_stock = job.steam_app_id is None and len(press) < MIN_PRESS_IMAGES
+    stock_assets = _log_usable(_stock_assets(draft, job), blocked, job) if wants_stock else []
     stock = _stock_shots(stock_assets, video.slot_s)
     if not (trailer or stock or stills):
         raise ValueError(_no_footage_reason(job.settings, job.steam_app_id is not None))
     music = pick_music(job.settings.music_dir, random.Random(job.video_id))
     rest = _log_usable(_cards(draft, article, job) + ([music] if music else []), blocked, job)
-    return _Visuals(steam + stock_assets + rest, trailer, stock, stills)
+    return _Visuals(steam + press + stock_assets + rest, trailer, stock, stills)
 
 
 def _log_usable(candidates: list[Asset], blocked: set[str], job: _Job) -> list[Asset]:
@@ -263,12 +278,12 @@ def _card_pairs(assets: list[Asset]) -> list[Card]:
 def _stills(assets: list[Asset], job: _Job) -> list[Path]:
     stills = []
     for a in assets:
-        if a.kind != AssetKind.SCREENSHOT:
+        if a.kind not in (AssetKind.SCREENSHOT, AssetKind.PRESS_IMAGE):
             continue
         try:
             stills.append(render_still(a.local_path, job.work / f"still_{a.id}.png"))
         except (OSError, UnidentifiedImageError) as exc:
-            log.warning("Skipping screenshot %s that could not be read: %s", a.source_url, exc)
+            log.warning("Skipping image %s that could not be read: %s", a.source_url, exc)
     return stills
 
 
@@ -304,5 +319,6 @@ def _stock_shots(assets: list[Asset], length: float) -> list[Shot]:
 def _credit(assets: list[Asset], article: Article) -> str:
     steam = next((a for a in assets if a.kind in (AssetKind.TRAILER, AssetKind.SCREENSHOT)), None)
     owners = [f"{steam.rightsholder} / Steam"] if steam else []
+    owners += list(dict.fromkeys(a.rightsholder for a in assets if a.kind == AssetKind.PRESS_IMAGE))
     owners += list(dict.fromkeys(a.source_platform.capitalize() for a in assets if a.kind == AssetKind.STOCK_VIDEO))
     return f"Footage: {', '.join(owners)}" if owners else f"Source: {article.domain}"

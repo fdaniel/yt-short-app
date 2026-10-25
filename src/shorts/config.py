@@ -80,6 +80,10 @@ DEFAULT_FEEDS = (
     FeedSource(name="NVIDIA Newsroom", url="https://nvidianews.nvidia.com/releases.xml", topic="hardware"),
     FeedSource(name="NVIDIA Blog", url="https://blogs.nvidia.com/feed/", topic="hardware"),
     FeedSource(name="AMD Press Releases", url="https://ir.amd.com/news-events/press-releases/rss", topic="hardware"),
+    # consumer tech newsrooms: launches of phones, PCs and gadgets, with official photos in each story
+    FeedSource(name="Apple Newsroom", url="https://www.apple.com/newsroom/rss-feed.rss", topic="hardware"),
+    FeedSource(name="Samsung Newsroom", url="https://news.samsung.com/global/feed", topic="hardware"),
+    FeedSource(name="Google Blog", url="https://blog.google/rss/", topic="hardware"),
     FeedSource(name="Xbox Wire", url="https://news.xbox.com/en-us/feed/", topic="gaming"),
     FeedSource(name="PlayStation Blog", url="https://blog.playstation.com/feed/", topic="gaming"),
     FeedSource(name="Nintendo", url="https://www.nintendo.com/en-gb/news.xml", topic="gaming"),

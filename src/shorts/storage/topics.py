@@ -65,7 +65,10 @@ class TopicRepository:
         videos = self._conn.execute("SELECT title FROM videos WHERE title IS NOT NULL AND created_at >= ?", (since,))
         return [row[0] for row in topics] + [row[0] for row in videos]
 
-    def videos_made_on(self, day: date) -> int:
-        """Videos started on `day` (local time) that did not fail."""
-        rows = self._conn.execute("SELECT created_at FROM videos WHERE status != ?", (VideoStatus.FAILED.value,))
-        return sum(1 for (created,) in rows if datetime.fromisoformat(created).astimezone().date() == day)
+    def videos_made_on(self, day: date, *, game: bool | None = None) -> int:
+        """Videos started on `day` (local time) that did not fail; only game (Steam) or only other news if `game` is set."""
+        rows = self._conn.execute("SELECT created_at, steam_app_id FROM videos WHERE status != ?",
+                                  (VideoStatus.FAILED.value,))
+        return sum(1 for created, steam in rows
+                   if datetime.fromisoformat(created).astimezone().date() == day
+                   and (game is None or (steam is not None) == game))

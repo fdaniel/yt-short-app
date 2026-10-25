@@ -106,7 +106,7 @@ def test_makes_one_video_from_best_topic_end_to_end(cfg, conn, synthetic_video):
 def test_best_topic_wins_and_feed_text_is_used(cfg, conn):
     mock_feeds()
     make = FakeMake(conn)
-    llm = ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9), verdict(1, 3), verdict(2, 5)])])
+    llm = ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9), verdict(1, 3), verdict(2, 2)])])
     report = run(cfg, conn, llm, make)
     assert [c[0] for c in make.calls] == ["https://blogs.nvidia.com/blog/dlss-45/"]
     assert make.calls[0][2] is not None and "launch" in make.calls[0][2].text
@@ -267,3 +267,45 @@ def test_headline_is_not_taken_for_a_game_name(cfg, conn):
     make = FakeMake(conn)
     run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game=None)])]), make)
     assert make.calls[0][1] is None
+
+
+SEASON = ("Modern Warfare 4 season one detailed", "https://news.xbox.com/en-us/mw4-season/", "Sun, 18 Oct 2026 07:00:00 +0000")
+
+
+@respx.mock
+def test_a_run_mixes_tech_and_games_instead_of_two_games(cfg, conn):
+    # batch order: [0] DLSS (tech), [1] MW4 launch, [2] MW4 season; both games rate higher than the tech story
+    mock_feeds(hw=HW_ITEMS[:1], games=GAME_ITEMS + [SEASON])
+    make = FakeMake(conn)
+    llm = ScriptedLLM([TriageBatch(verdicts=[verdict(0, 6), verdict(1, 9, game="Modern Warfare 4"),
+                                             verdict(2, 8, game="Modern Warfare 4")])])
+    run(cfg, conn, llm, make)
+    assert [c[0] for c in make.calls] == ["https://news.xbox.com/en-us/mw4/", "https://blogs.nvidia.com/blog/dlss-45/"]
+
+
+@respx.mock
+def test_a_day_with_more_tech_videos_gets_a_game_next(cfg, conn):
+    VideoRepository(conn).create("https://earlier-tech", None, VideoFormat.NEWS_FLASH)
+    conn.execute("UPDATE videos SET created_at = ?", (NOW.isoformat(),))
+    mock_feeds(hw=HW_ITEMS[:1], games=GAME_ITEMS)
+    make = FakeMake(conn)
+    llm = ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9), verdict(1, 7, game="Modern Warfare 4")])])
+    run(cfg.model_copy(update={"discovery": cfg.discovery.model_copy(update={"videos_per_run": 1})}), conn, llm, make)
+    assert [c[0] for c in make.calls] == ["https://news.xbox.com/en-us/mw4/"]
+
+
+@respx.mock
+def test_only_one_kind_available_is_still_made(cfg, conn):
+    mock_feeds(hw=[], games=GAME_ITEMS + [SEASON])
+    make = FakeMake(conn)
+    llm = ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game="Modern Warfare 4"), verdict(1, 8, game="Modern Warfare 4")])])
+    run(cfg, conn, llm, make)
+    assert len(make.calls) == 2
+
+
+@respx.mock
+def test_tech_story_counts_its_newsroom_photos_as_footage(cfg, conn):
+    mock_feeds(hw=HW_ITEMS[:1], games=[])
+    run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 7)])]), FakeMake(conn))
+    explanation = conn.execute("SELECT explanation FROM topics").fetchone()["explanation"]
+    assert "footage 1.00" in explanation

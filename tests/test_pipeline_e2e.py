@@ -366,3 +366,64 @@ def test_unexpected_steam_error_refuses_the_game_story_instead_of_using_stock(
     with pytest.raises(PipelineError, match="no footage"):
         make_video(NEWS, 2, VideoFormat.NEWS_FLASH, pexels_settings, deps, conn)
     assert search.call_count == 0
+
+
+TECH = "https://www.apple.com/newsroom/2026/10/iphone-duo-arrives/"
+PHOTOS = [f"https://www.apple.com/newsroom/images/2026/10/iphone-duo/{n}.jpg" for n in "abcde"]
+
+
+def photo(colour):
+    buf = io.BytesIO()
+    Image.new("RGB", (1920, 1080), colour).save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+def article_with_photos(urls):
+    text = (FIXTURES / "article_nvidia.html").read_text()
+    figures = "".join(f'<figure><img src="{u}"></figure><p>{"Official photo from the launch day event. " * 3}</p>'
+                      for u in urls)
+    return text.replace("</article>", f"{figures}</article>", 1)
+
+
+def mock_photos(urls):
+    for u, colour in zip(urls, ["navy", "darkred", "darkgreen", "purple", "teal"]):
+        respx.get(u).respond(200, content=photo(colour))
+
+
+@respx.mock
+def test_e2e_tech_story_shows_the_newsroom_photos_and_no_stock(settings, conn, synthetic_video):
+    respx.get(TECH).respond(200, text=article_with_photos(PHOTOS))
+    mock_photos(PHOTOS)
+    search = mock_pixabay(synthetic_video)
+    deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
+    r = make_video(TECH, None, VideoFormat.NEWS_FLASH, settings.model_copy(update={"pixabay_api_key": "xk"}), deps,
+                   conn)
+    assets = AssetRepository(conn).list_for_video(r.video_id)
+    assert [a.source_url for a in assets if a.kind == AssetKind.PRESS_IMAGE] == PHOTOS
+    assert not search.called
+    meta = json.loads(r.metadata_path.read_text())
+    assert "Images: Apple (www.apple.com)" in meta["description"]
+    assert probe_video(r.video_path).height == 1920
+
+
+@respx.mock
+def test_e2e_tech_story_with_few_photos_adds_stock_footage(settings, conn, synthetic_video):
+    respx.get(TECH).respond(200, text=article_with_photos(PHOTOS[:1]))
+    mock_photos(PHOTOS[:1])
+    search = mock_pixabay(synthetic_video)
+    deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
+    r = make_video(TECH, None, VideoFormat.NEWS_FLASH, settings.model_copy(update={"pixabay_api_key": "xk"}), deps,
+                   conn)
+    kinds = [a.kind for a in AssetRepository(conn).list_for_video(r.video_id)]
+    assert search.called and kinds.count(AssetKind.PRESS_IMAGE) == 1 and AssetKind.STOCK_VIDEO in kinds
+
+
+@respx.mock
+def test_e2e_photos_in_the_feeds_own_text_are_used_without_fetching_the_page(settings, conn):
+    page = respx.get(TECH)
+    mock_photos(PHOTOS)
+    given = extract_article(TECH, article_with_photos(PHOTOS))
+    deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
+    r = make_video(TECH, None, VideoFormat.NEWS_FLASH, settings, deps, conn, article=given)
+    kinds = [a.kind for a in AssetRepository(conn).list_for_video(r.video_id)]
+    assert kinds.count(AssetKind.PRESS_IMAGE) == len(PHOTOS) and page.call_count == 0

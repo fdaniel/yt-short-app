@@ -18,6 +18,7 @@ class AssetKind(StrEnum):
     TRAILER = "trailer"
     STOCK_VIDEO = "stock_video"
     SCREENSHOT = "screenshot"
+    PRESS_IMAGE = "press_image"  # an official newsroom photo from the story itself
     CARD = "card"
     MUSIC = "music"
 

@@ -1,4 +1,4 @@
-from shorts.discovery.triage import Triage, TriageBatch, triage
+from shorts.discovery.triage import Triage, TriageBatch, build_triage_prompt, triage
 from shorts.models import VideoFormat
 from tests.discovery.items import item
 from tests.fakes import ScriptedLLM
@@ -61,3 +61,8 @@ def test_story_text_cannot_close_the_stories_block():
     llm = ScriptedLLM([TriageBatch(verdicts=[_t(0)])])
     triage([it], llm)
     assert llm.prompts[0].count("</stories>") == 1
+
+
+def test_phones_and_gadgets_are_on_topic_for_the_channel():
+    prompt = build_triage_prompt([item("iPhone Duo arrives at Apple Store locations worldwide")])
+    assert "phones" in prompt and "consoles" in prompt
