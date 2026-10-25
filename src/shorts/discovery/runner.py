@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import httpx
+
 from shorts.config import Settings
 from shorts.discovery.feeds import FeedItem, article_from_item, fetch_all
 from shorts.discovery.score import ScoredTopic, cheap_filter, coverage, fair_share, score_topic
@@ -17,13 +19,16 @@ from shorts.discovery.steam_news import fetch_steam_news
 from shorts.discovery.triage import story_text, triage
 from shorts.llm.base import AllProvidersExhausted, InvalidOutput
 from shorts.models import TopicStatus
+from shorts.net import DownloadTooLarge, UnsafeURLError
 from shorts.pipeline import PipelineDeps, PipelineError, VideoResult, make_video
-from shorts.sources.steam import find_steam_app_id, normalise_title
+from shorts.sources.article import Article, SourceTextError, fetch_article
+from shorts.sources.steam import SteamError, fetch_steam_app, find_steam_app_id, maker_named, normalise_title
 from shorts.storage.topics import TopicRepository
 
 log = logging.getLogger(__name__)
 GB = 1024**3
 AI_UNAVAILABLE = "AI unavailable (free quota used up or errors), trying again next run"
+_CHECK_ERRORS = (httpx.HTTPError, ValueError, SourceTextError, SteamError, DownloadTooLarge, UnsafeURLError)
 
 
 class RunLocked(Exception):
@@ -143,6 +148,22 @@ def _next_pick(pending: list, games: int, others: int):
     return pending[0]
 
 
+def _article_and_mismatch(it: FeedItem, steam_id: int | None, settings: Settings,
+                          deps: PipelineDeps) -> tuple[Article | None, str | None]:
+    """The story's article, and why the Steam game found by its name is not the story's game (None if it is).
+    A game posted on its own Steam page, or a story with no game, needs no check."""
+    article = article_from_item(it)
+    if steam_id is None or it.steam_app_id is not None:
+        return article, None
+    max_bytes = settings.limits.max_html_bytes
+    article = article or fetch_article(deps.http, it.url, max_bytes=max_bytes)
+    app = fetch_steam_app(deps.http, steam_id, max_bytes=max_bytes)
+    if maker_named(app, f"{it.title} {article.text}"):
+        return article, None
+    makers = ", ".join(dict.fromkeys(app.developers + app.publishers)) or "an unnamed studio"
+    return article, f"Steam's {app.name!r} is by {makers}, whom the story never names: another game with that name"
+
+
 def _make_best(ranked, settings, deps, conn, topics, today, make, considered) -> RunReport:
     d = settings.discovery
     made: list[VideoResult] = []
@@ -154,10 +175,19 @@ def _make_best(ranked, settings, deps, conn, topics, today, make, considered) ->
         scored, steam_id = pick = _next_pick(pending, games, others)
         pending.remove(pick)
         it = scored.item
+        try:
+            article, mismatch = _article_and_mismatch(it, steam_id, settings, deps)
+        except _CHECK_ERRORS as exc:
+            log.warning("Could not check the game of %s, trying it next run: %s", it.title, exc)
+            continue
+        if mismatch:
+            log.warning("Wrong footage avoided for %s: %s", it.title, mismatch)
+            topics.record(it.url, it.source, it.title, it.published, TopicStatus.SKIPPED, scored.score, mismatch)
+            continue
         topic_id = topics.record(it.url, it.source, it.title, it.published, TopicStatus.PICKED, scored.score,
                                  scored.explanation)
         try:
-            result = make(it.url, steam_id, scored.triage.format, settings, deps, conn, article=article_from_item(it))
+            result = make(it.url, steam_id, scored.triage.format, settings, deps, conn, article=article)
         except PipelineError as exc:
             if isinstance(exc.__cause__, AllProvidersExhausted):
                 topics.forget(it.url)

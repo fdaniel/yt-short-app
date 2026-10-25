@@ -46,6 +46,7 @@ class SteamApp:
     publishers: tuple[str, ...]
     movies: tuple[SteamMovie, ...]
     screenshots: tuple[str, ...]
+    developers: tuple[str, ...] = ()
 
 
 def _parse_movie(raw: dict) -> SteamMovie:
@@ -70,6 +71,7 @@ def parse_appdetails(app_id: int, payload: dict) -> SteamApp:
         publishers=tuple(data.get("publishers") or ()),
         movies=tuple(_parse_movie(m) for m in data.get("movies") or ()),
         screenshots=tuple(s["path_full"] for s in data.get("screenshots") or () if s.get("path_full")),
+        developers=tuple(data.get("developers") or ()),
     )
 
 
@@ -152,6 +154,13 @@ def collect_steam_assets(
 
 def normalise_title(title: str) -> str:
     return " ".join(re.sub(r"[^0-9a-z]+", " ", re.sub(r"[®™©]", "", title.casefold())).split())
+
+
+def maker_named(app: SteamApp, text: str) -> bool:
+    """The story names the game's developer or publisher: a store game with the story's game name but
+    from another studio ("Farlands", a farming game, for FragPunk's new "Farlands" mode) is not the story's."""
+    story = f" {normalise_title(text)} "
+    return any(name and f" {name} " in story for name in map(normalise_title, app.developers + app.publishers))
 
 
 def find_steam_app_id(client: httpx.Client, game_title: str) -> int | None:

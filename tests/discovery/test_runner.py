@@ -22,7 +22,7 @@ from tests.test_pipeline_e2e import ALL_OK, GOOD
 FIXTURES = Path(__file__).parent.parent / "fixtures"
 HW = FeedSource(name="NVIDIA Blog", url="https://blogs.nvidia.com/feed/", topic="hardware")
 GAMES = FeedSource(name="Xbox Wire", url="https://news.xbox.com/en-us/feed/", topic="gaming")
-PARA = "<p>" + "Official details about the launch, the date, the price and the platforms are below. " * 8 + "</p>"
+PARA = "<p>" + "Official details from Activision about the launch, the date, the price and the platforms. " * 8 + "</p>"
 GB = 1024**3
 
 
@@ -53,11 +53,17 @@ def cfg(settings):
     return settings.model_copy(update={"discovery": DiscoverySettings(feeds=(HW, GAMES), steam_lists=())})
 
 
+def mock_store(name="Call of Duty®: Modern Warfare® 4", developers=("Infinity Ward",), publishers=("Activision",)):
+    respx.get(url__startswith="https://store.steampowered.com/api/storesearch/").respond(
+        200, json=json.loads((FIXTURES / "steam_search_mw4.json").read_text()))
+    respx.get(url__startswith="https://store.steampowered.com/api/appdetails").respond(200, json={"4435490": {
+        "success": True, "data": {"name": name, "developers": list(developers), "publishers": list(publishers)}}})
+
+
 def mock_feeds(hw=HW_ITEMS, games=GAME_ITEMS):
     respx.get(HW.url).respond(200, text=rss(*hw))
     respx.get(GAMES.url).respond(200, text=rss(*games))
-    respx.get(url__startswith="https://store.steampowered.com/api/storesearch/").respond(
-        200, json=json.loads((FIXTURES / "steam_search_mw4.json").read_text()))
+    mock_store()
 
 
 class FakeMake:
@@ -245,8 +251,8 @@ def test_game_named_only_in_the_feed_summary_gets_steam_id(cfg, conn):
     respx.get(HW.url).respond(200, text=rss())
     respx.get(GAMES.url).respond(200, text=rss(story, full_text=False,
                                                   summary="<p>Modern Warfare 4 gets a new trailer.</p>"))
-    respx.get(url__startswith="https://store.steampowered.com/api/storesearch/").respond(
-        200, json=json.loads((FIXTURES / "steam_search_mw4.json").read_text()))
+    respx.get(story[1]).respond(200, text=f"<html><body><article><h1>New trailer</h1>{PARA}</article></body></html>")
+    mock_store()
     make = FakeMake(conn)
     run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game="Modern Warfare 4")])]), make)
     assert make.calls[0][1] == 4435490
@@ -325,3 +331,15 @@ def test_steam_announcement_is_made_with_its_own_game_footage(cfg, conn):
     run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 8, game="Resident Evil Requiem")])]), make)
     assert make.calls[0][1] == 3764200 and not search.called
     assert "Resident Evil Requiem: Free DLC out now" in make.calls[0][2].title
+
+
+@respx.mock
+def test_a_store_game_with_the_same_name_from_another_studio_is_not_used(cfg, conn):
+    # FragPunk's new "Farlands" mode is not JanduSoft's farming game "Farlands"
+    mock_feeds(hw=[], games=GAME_ITEMS)
+    mock_store(developers=("JanduSoft",), publishers=("Anotherindie",))
+    make = FakeMake(conn)
+    report = run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game="Modern Warfare 4")])]), make)
+    assert make.calls == [] and report.made == ()
+    reason = conn.execute("SELECT status, explanation FROM topics").fetchone()
+    assert reason["status"] == "skipped" and "JanduSoft" in reason["explanation"]
