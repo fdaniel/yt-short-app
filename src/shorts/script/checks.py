@@ -123,3 +123,28 @@ def repetition_problems(draft: ScriptDraft) -> list[str]:
         if len(shared) >= MIN_SHARED_WORDS and len(shared) >= MIN_SHARED_SHARE * len(hook):
             problems.append(f"repeats the hook ({lines[0]!r} / {line!r}): every sentence must add a new fact")
     return problems
+
+
+def _plain(text: str) -> str:
+    return " ".join(re.sub(r"[^0-9a-z]+", " ", re.sub(r"[®™©]", "", text.casefold())).split())
+
+
+def _is_game(subject: str, games: list[str]) -> bool:
+    return any(subject in game or game in subject for game in games)
+
+
+def subject_problems(draft: ScriptDraft) -> list[str]:
+    """One Short, one subject: in a Short about a game, a second game means a roundup was squeezed in
+    (a Call of Duty Short that went on about Final Fantasy and Fire TV Sticks). A Short about a
+    platform (GeForce NOW, Game Pass) may name the games it adds."""
+    narration = f" {_plain(' '.join(narration_lines(draft)))} "
+    names = [name for name in dict.fromkeys(map(_plain, draft.games_named)) if name]
+    # "Call of Duty" inside "Call of Duty: Modern Warfare 4" is the same game
+    games = [name for name in names if not any(name != other and name in other for other in names)]
+    spoken = [name for name in games if f" {name} " in narration]
+    subject = _plain(draft.subject)
+    if len(spoken) < 2 or (subject and not _is_game(subject, games)):
+        return []
+    shown = [g for g in draft.games_named if _plain(g) in spoken]
+    return [f"the narration covers {len(spoken)} games ({', '.join(shown)}): make the whole Short about "
+            f"{shown[0]} only and leave the others out"]

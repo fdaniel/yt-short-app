@@ -1,5 +1,6 @@
 from shorts.config import VideoSettings
 from shorts.script.checks import (
+    subject_problems,
     repetition_problems,
     card_problems,
     length_problems,
@@ -134,3 +135,29 @@ def test_length_feedback_says_how_many_words_to_cut_or_add():
     assert "cut at least 5 words" in length_problems(long_draft, video)[0]  # 70 words
     short_draft = draft(hook="a b", body=["c", "d", "e"], closing="f")
     assert "add at least 49 words" in length_problems(short_draft, video)[0]  # 6 words
+
+
+def test_a_second_game_in_the_narration_is_a_problem():
+    roundup = draft(hook="Call of Duty: Modern Warfare 4 arrives today on GeForce NOW.",
+                    body=["Ultimate members get ray tracing.", "FINAL FANTASY RESONANCE brings pixel art to the cloud.",
+                          "Six new games join this week."],
+                    games_named=["Call of Duty: Modern Warfare 4", "FINAL FANTASY RESONANCE"])
+    problems = subject_problems(roundup)
+    assert len(problems) == 1 and "about Call of Duty: Modern Warfare 4 only" in problems[0]
+
+
+def test_one_game_named_two_ways_or_only_listed_is_fine():
+    focused = draft(hook="Call of Duty: Modern Warfare 4 arrives today on GeForce NOW.",
+                    body=["Call of Duty fans can stream it in 4K.", "It runs at 120 frames per second.", "Ray tracing is on."],
+                    games_named=["Call of Duty: Modern Warfare 4", "Call of Duty", "Hades"])
+    assert subject_problems(focused) == []
+
+
+def test_a_short_about_a_platform_may_name_the_games_it_adds():
+    weekly = draft(hook="GeForce NOW adds six games this week, led by Modern Warfare 4.",
+                   body=["Call of Duty: Modern Warfare 4 streams at launch.", "FINAL FANTASY RESONANCE joins too.",
+                         "Fire TV Stick owners can now subscribe through Amazon."],
+                   subject="GeForce NOW", games_named=["Call of Duty: Modern Warfare 4", "FINAL FANTASY RESONANCE"])
+    assert subject_problems(weekly) == []
+    about_the_game = weekly.model_copy(update={"subject": "Call of Duty: Modern Warfare 4"})
+    assert "leave the others out" in subject_problems(about_the_game)[0]

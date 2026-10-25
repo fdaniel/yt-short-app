@@ -10,6 +10,7 @@ from shorts.script.checks import (
     numbers_ungrounded,
     quotes_missing,
     repetition_problems,
+    subject_problems,
 )
 from shorts.script.prompts import build_factcheck_prompt, build_script_prompt
 from shorts.script.schema import FactCheckResult, ScriptDraft
@@ -29,7 +30,8 @@ class ScriptRejected(Exception):
 def _cheap_problems(draft: ScriptDraft, article: Article, video: VideoSettings) -> list[str]:
     missing = [f"source_quote not found verbatim in SOURCE: {q!r}" for q in quotes_missing(draft, article.text)]
     numbers = [f"number not in SOURCE: {n}" for n in numbers_ungrounded(draft, article.text)]
-    return length_problems(draft, video) + card_problems(draft) + repetition_problems(draft) + missing + numbers
+    return (length_problems(draft, video) + card_problems(draft) + repetition_problems(draft)
+            + subject_problems(draft) + missing + numbers)
 
 
 def _feedback(draft: ScriptDraft, problems: list[str], video: VideoSettings) -> list[str]:

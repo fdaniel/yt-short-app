@@ -36,13 +36,27 @@ Rules:
 - Write in English.
 - Use only facts from the SOURCE below. Do not add anything you know from elsewhere.
 - Total narration (hook + body + closing) must be {video.min_words}-{video.max_words} words. Shape it as
-  {sentence_plan(video)}. A story with many items (games, devices) keeps only the most important ones.
+  {sentence_plan(video)}.
+- One subject, named in the hook, and every body sentence and the closing tell the viewer more about it:
+  - a game: the whole Short stays on that game (what is new, how it plays, when, where, price); never
+    mention another game.
+  - a platform, service or product (GeForce NOW, Game Pass, PlayStation Plus, a phone, a graphics card):
+    the Short may cover what it offers or adds, such as this week's games or new features.
+  A weekly roundup or list post is a Short about its platform or service, built from its highlights. Any
+  other item that does not belong to the subject is left out, in the titles and description too.
+- The hook and every title open with the subject's name, so the viewer knows at once what the Short is
+  about (a roundup: "GeForce NOW adds ...", never "Call of Duty ... arrives on GeForce NOW").
+- Write correct English: check grammar and plurals in every sentence.
+- The closing stays on the same subject (what to look forward to, or a short question to viewers about it).
 - The hook is at most 12 words, names the game or product (for an expansion or update, the main game too,
   e.g. its full name), and leads with the most striking concrete fact in the SOURCE (a new feature, a
   number, a surprise), not just that it is out or announced. No exaggeration.
 - Every sentence adds a new fact. Never repeat or reword the hook or an earlier sentence, and say only once
   that something is out or available.
 - No labels or filler such as "News flash", "Breaking news" or "In other news": start with the news.
+- Talk like a gamer telling a friend, not like a press release: every sentence carries a concrete detail
+  (a name, number, date, price or feature). No empty corporate lines such as "officially unveiled",
+  "expands support across a broad range of platforms", "a new gameplay pillar" or "delivers an experience".
 - Every number you say must appear in the SOURCE.
 - For every factual claim, add an entry to "claims" whose source_quote is copied verbatim from the SOURCE.
 - Plain text only: no emoji, no hashtags inside the narration.
@@ -52,8 +66,10 @@ Rules:
 - footage_queries: 2 to 4 stock-video search terms of 2-3 words that show what the story itself is about
   (the kind of product, its use, its setting), generic objects or scenes only: no brand or product names,
   no people. Never use terms that have nothing to do with this story.
+- subject: the game, platform, service or product this Short is about, as the hook names it.
 - games_named: the video games your narration names, the hook's game first, up to 3, each title copied
-  exactly as the SOURCE writes it; [] if it names none. Never a feature, mode, map, update or product name.
+  exactly as the SOURCE writes it; [] if it names none. Never a feature, mode, map, update or product name,
+  and an expansion or DLC is not a separate game.
 - Format: {FORMAT_GUIDES[fmt]}
 """
     fixes = ""

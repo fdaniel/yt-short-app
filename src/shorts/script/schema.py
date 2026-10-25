@@ -33,6 +33,7 @@ class ScriptDraft(_Frozen):
     card_facts: list[CardFact] = Field(default_factory=list, max_length=6)
     footage_queries: list[str] = Field(default_factory=list)
     games_named: list[str] = Field(default_factory=list)
+    subject: str = ""  # the one game, platform or product the Short is about
 
     @field_validator("footage_queries", mode="before")
     @classmethod
