@@ -62,6 +62,8 @@ def _credits(article: Article, assets: list[Asset]) -> list[str]:
         lines.append(f"Footage: {_clean(holder)} ({platform})")
     lines += [f"Images: {_clean(holder)} ({platform})" for holder, platform in
               dict.fromkeys((a.rightsholder, a.source_platform) for a in assets if a.kind == AssetKind.PRESS_IMAGE)]
+    lines += [f"Video clips: {_clean(holder)} ({platform})" for holder, platform in
+              dict.fromkeys((a.rightsholder, a.source_platform) for a in assets if a.kind == AssetKind.PRESS_VIDEO)]
     lines += [f"Stock footage: {_clean(a.rightsholder)} via {a.source_platform.capitalize()} ({a.source_url})"
               for a in assets if a.kind == AssetKind.STOCK_VIDEO]
     lines += [f"Music: {_clean(a.notes)}" for a in assets if a.kind == AssetKind.MUSIC]

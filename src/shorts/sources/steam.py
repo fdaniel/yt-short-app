@@ -111,10 +111,10 @@ def _download_trailer(movie: SteamMovie, client: httpx.Client, work_dir: Path, s
     return clean
 
 
-def _trailers(app: SteamApp, client: httpx.Client, work_dir: Path, settings: Settings) -> list[Asset]:
+def _trailers(app: SteamApp, client: httpx.Client, work_dir: Path, settings: Settings, limit: int) -> list[Asset]:
     candidates = sorted(
         (m for m in app.movies if m.mp4_url or m.hls_url), key=lambda m: not m.highlight
-    )[:MAX_TRAILERS]
+    )[:limit]
     assets = []
     for movie in candidates:
         try:
@@ -126,9 +126,9 @@ def _trailers(app: SteamApp, client: httpx.Client, work_dir: Path, settings: Set
     return assets
 
 
-def _screenshots(app: SteamApp, client: httpx.Client, work_dir: Path, settings: Settings) -> list[Asset]:
+def _screenshots(app: SteamApp, client: httpx.Client, work_dir: Path, settings: Settings, limit: int) -> list[Asset]:
     assets = []
-    for i, url in enumerate(app.screenshots[:MAX_SCREENSHOTS]):
+    for i, url in enumerate(app.screenshots[:limit]):
         try:
             path = download_file(
                 client, url, work_dir / f"screenshot_{i}.jpg", max_bytes=settings.limits.max_image_bytes
@@ -141,15 +141,16 @@ def _screenshots(app: SteamApp, client: httpx.Client, work_dir: Path, settings: 
 
 
 def collect_steam_assets(
-    app: SteamApp, client: httpx.Client, work_dir: Path, settings: Settings, blocked: set[str]
+    app: SteamApp, client: httpx.Client, work_dir: Path, settings: Settings, blocked: set[str],
+    *, max_trailers: int = MAX_TRAILERS, max_screenshots: int = MAX_SCREENSHOTS,
 ) -> list[Asset]:
     """Download trailers (unless the publisher is blocked) and screenshots for `app`."""
     work_dir.mkdir(parents=True, exist_ok=True)
     publisher_blocked = any(p.strip().lower() in blocked for p in app.publishers)
     if publisher_blocked:
         log.info("Trailers from %s are blocked; using screenshots only", app.publishers)
-    trailers = [] if publisher_blocked else _trailers(app, client, work_dir, settings)
-    return trailers + _screenshots(app, client, work_dir, settings)
+    trailers = [] if publisher_blocked else _trailers(app, client, work_dir, settings, max_trailers)
+    return trailers + _screenshots(app, client, work_dir, settings, max_screenshots)
 
 
 def normalise_title(title: str) -> str:

@@ -30,7 +30,9 @@ from shorts.script.schema import ScriptDraft
 from shorts.script.writer import write_checked_script
 from shorts.sources import pexels, pixabay
 from shorts.sources.article import Article, fetch_article
+from shorts.sources.named_games import named_game_assets
 from shorts.sources.press import collect_press_images
+from shorts.sources.press_video import collect_press_clips
 from shorts.sources.stock import MAX_CLIPS, StockSource, collect_stock_assets
 from shorts.sources.steam import SteamError, collect_steam_assets, fetch_steam_app
 from shorts.text import clean_text
@@ -47,7 +49,8 @@ _STOCK_ERRORS = (httpx.HTTPError, ValueError, OSError, FFmpegError, DownloadTooL
 DEFAULT_FOOTAGE_QUERIES = ("computer hardware", "gaming setup", "circuit board closeup")
 STOCK_TAIL_S = 0.3
 MIN_SCENE_S = 0.4
-MIN_PRESS_IMAGES = 4  # fewer official photos than this: licensed stock video fills in
+MIN_PRESS_IMAGES = 4  # fewer official photos and clips than this: licensed stock video fills in
+_MOVING = (AssetKind.STOCK_VIDEO, AssetKind.PRESS_VIDEO)
 
 
 class PipelineError(Exception):
@@ -190,13 +193,24 @@ def _stock_assets(draft: ScriptDraft, job: _Job) -> list[Asset]:
 
 
 def _press_assets(article: Article, job: _Job) -> list[Asset]:
+    """The official article's own photos and video clips."""
     if job.steam_app_id is not None or not article.html:
         return []
+    work = job.work / "press"
     try:
-        return collect_press_images(job.deps.http, article.url, article.html, job.work / "press", job.settings)
+        images = collect_press_images(job.deps.http, article.url, article.html, work, job.settings)
     except (ValueError, OSError) as exc:
         log.warning("Newsroom photos unavailable for %s: %s", article.url, exc)
+        images = []
+    return images + collect_press_clips(job.deps.http, article.url, article.html, work, job.settings)
+
+
+def _named_game_assets(draft: ScriptDraft, article: Article, job: _Job, blocked: set[str]) -> list[Asset]:
+    """A tech story's footage from the games it names; game news already has its own game's footage."""
+    if job.steam_app_id is not None or not draft.games_named:
         return []
+    return named_game_assets(draft.games_named, f"{article.title} {article.text}", job.deps.http,
+                             job.work / "games", job.settings, blocked)
 
 
 def _no_footage_reason(settings: Settings, game: bool) -> str:
@@ -238,17 +252,18 @@ def _cards(draft: ScriptDraft, article: Article, job: _Job) -> list[Asset]:
 
 def _gather_visuals(draft: ScriptDraft, article: Article, job: _Job, duration: float) -> _Visuals:
     """Game news: only the game's own trailer and screenshots. Other news: the official article's own
-    photos, with licensed stock video only when it has too few."""
+    photos and clips, footage of the games it names, and licensed stock video only when that is too little."""
     blocked = BlocklistRepository(job.conn).names()
     video = job.settings.video
-    steam = _log_usable(_steam_assets(job, blocked), blocked, job)
+    steam = _log_usable(_steam_assets(job, blocked) + _named_game_assets(draft, article, job, blocked), blocked, job)
     trailer = usable_trailer_shots(_trailer_shots(steam), duration, slot_s=video.slot_s, max_shot_s=video.max_shot_s)
     press = _log_usable(_press_assets(article, job), blocked, job)
     stills = _stills(steam + press, job)
     # game news shows only the game's own footage: generic stock put a motherboard in a cat game's video
-    wants_stock = job.steam_app_id is None and len(press) < MIN_PRESS_IMAGES
+    wants_stock = job.steam_app_id is None and not steam and len(press) < MIN_PRESS_IMAGES
     stock_assets = _log_usable(_stock_assets(draft, job), blocked, job) if wants_stock else []
-    stock = _stock_shots(stock_assets, video.slot_s)
+    # the company's own clips first, so they come before any stock clip
+    stock = _stock_shots([a for a in press if a.kind == AssetKind.PRESS_VIDEO] + stock_assets, video.slot_s)
     if not (trailer or stock or stills):
         raise ValueError(_no_footage_reason(job.settings, job.steam_app_id is not None))
     music = pick_music(job.settings.music_dir, random.Random(job.video_id))
@@ -312,13 +327,14 @@ def _clip_pieces(asset: Asset, length: float) -> list[Shot]:
 
 def _stock_shots(assets: list[Asset], length: float) -> list[Shot]:
     """Every clip cut into slot-sized pieces, taken in turn from each clip so the same one never runs twice."""
-    per_clip = [_clip_pieces(a, length) for a in assets if a.kind == AssetKind.STOCK_VIDEO]
+    per_clip = [_clip_pieces(a, length) for a in assets if a.kind in _MOVING]
     return [piece for piece in chain.from_iterable(zip_longest(*per_clip)) if piece is not None]
 
 
 def _credit(assets: list[Asset], article: Article) -> str:
-    steam = next((a for a in assets if a.kind in (AssetKind.TRAILER, AssetKind.SCREENSHOT)), None)
-    owners = [f"{steam.rightsholder} / Steam"] if steam else []
-    owners += list(dict.fromkeys(a.rightsholder for a in assets if a.kind == AssetKind.PRESS_IMAGE))
+    official = (AssetKind.PRESS_IMAGE, AssetKind.PRESS_VIDEO)
+    press = list(dict.fromkeys(a.rightsholder for a in assets if a.kind in official))
+    steam = dict.fromkeys(a.rightsholder for a in assets if a.kind in (AssetKind.TRAILER, AssetKind.SCREENSHOT))
+    owners = press + [f"{holder} / Steam" for holder in steam]
     owners += list(dict.fromkeys(a.source_platform.capitalize() for a in assets if a.kind == AssetKind.STOCK_VIDEO))
     return f"Footage: {', '.join(owners)}" if owners else f"Source: {article.domain}"

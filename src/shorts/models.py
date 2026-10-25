@@ -19,6 +19,7 @@ class AssetKind(StrEnum):
     STOCK_VIDEO = "stock_video"
     SCREENSHOT = "screenshot"
     PRESS_IMAGE = "press_image"  # an official newsroom photo from the story itself
+    PRESS_VIDEO = "press_video"  # an official newsroom video clip from the story itself, muted
     CARD = "card"
     MUSIC = "music"
 

@@ -39,6 +39,8 @@ Rules:
 - footage_queries: 2 to 4 stock-video search terms of 2-3 words that show what the story itself is about
   (the kind of product, its use, its setting), generic objects or scenes only: no brand or product names,
   no people. Never use terms that have nothing to do with this story.
+- games_named: the video games the SOURCE names, up to 3, each title copied exactly as the SOURCE writes it;
+  [] if it names none. Never a feature, mode, map, update or product name.
 - Format: {FORMAT_GUIDES[fmt]}
 """
     fixes = ""

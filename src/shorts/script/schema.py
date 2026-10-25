@@ -4,6 +4,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 MAX_FOOTAGE_QUERIES = 4
 MAX_QUERY_CHARS = 40
+MAX_GAMES_NAMED = 3
+MAX_GAME_NAME_CHARS = 80
 
 
 class _Frozen(BaseModel):
@@ -30,6 +32,7 @@ class ScriptDraft(_Frozen):
     claims: list[Claim] = Field(min_length=1)
     card_facts: list[CardFact] = Field(default_factory=list, max_length=6)
     footage_queries: list[str] = Field(default_factory=list)
+    games_named: list[str] = Field(default_factory=list)
 
     @field_validator("footage_queries", mode="before")
     @classmethod
@@ -39,6 +42,15 @@ class ScriptDraft(_Frozen):
             return []
         tidy = [" ".join(q.split())[:MAX_QUERY_CHARS].strip() for q in queries if isinstance(q, str)]
         return [q for q in tidy if q][:MAX_FOOTAGE_QUERIES]
+
+    @field_validator("games_named", mode="before")
+    @classmethod
+    def _tidy_games(cls, names: object) -> list[str]:
+        """Game names only add footage, and each is checked against the story, so bad ones are dropped."""
+        if not isinstance(names, list):
+            return []
+        tidy = [" ".join(n.split()) for n in names if isinstance(n, str)]
+        return [n for n in tidy if 0 < len(n) <= MAX_GAME_NAME_CHARS][:MAX_GAMES_NAMED]
 
 
 class ClaimVerdict(_Frozen):
