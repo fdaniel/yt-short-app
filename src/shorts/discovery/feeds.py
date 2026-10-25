@@ -25,6 +25,7 @@ class FeedItem:
     published: datetime  # timezone-aware, UTC
     content_html: str  # full text from content:encoded, or "" when the feed only has a summary
     summary: str = ""  # the feed's short description (HTML), for judging stories without full text
+    steam_app_id: int | None = None  # set when the story comes from the game's own Steam page
 
 
 def _published(entry) -> datetime | None:

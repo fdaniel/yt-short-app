@@ -80,11 +80,13 @@ def test_default_feeds_in_settings(tmp_path):
     cfg = tmp_path / "config.yaml"
     cfg.write_text("")
     d = load_settings(cfg, {"GEMINI_API_KEY": "k"}).discovery
-    assert [f.name for f in d.feeds] == ["NVIDIA Newsroom", "NVIDIA Blog", "AMD Press Releases", "Apple Newsroom",
-                                         "Samsung Newsroom", "Google Blog", "Xbox Wire", "PlayStation Blog",
+    assert [f.name for f in d.feeds] == ["NVIDIA Newsroom", "NVIDIA Blog", "AMD Newsroom", "Apple Newsroom",
+                                         "Samsung Newsroom", "Google Blog", "Windows Blog", "Meta Newsroom",
+                                         "Razer Newsroom", "Garmin Newsroom", "Xbox Wire", "PlayStation Blog",
                                          "Nintendo", "GamesPress"]
-    assert {f.topic for f in d.feeds[:6]} == {"hardware"} and {f.topic for f in d.feeds[6:]} == {"gaming"}
-    assert (d.max_videos_per_day, d.videos_per_run, d.max_attempts_per_run, d.triage_batch) == (6, 2, 4, 15)
+    assert {f.topic for f in d.feeds[:10]} == {"hardware"} and {f.topic for f in d.feeds[10:]} == {"gaming"}
+    assert (d.max_videos_per_day, d.videos_per_run, d.max_attempts_per_run, d.triage_batch) == (6, 2, 4, 20)
+    assert d.steam_lists == ("popularwishlist", "topsellers") and "patch notes" in d.exclude_keywords
     assert (d.max_age_h, d.min_free_gb) == (48, 10)
     assert d.weights.interest == 0.5 and "board of directors" in d.exclude_keywords
 

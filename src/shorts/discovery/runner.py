@@ -7,12 +7,13 @@ import sqlite3
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from shorts.config import Settings
 from shorts.discovery.feeds import FeedItem, article_from_item, fetch_all
 from shorts.discovery.score import ScoredTopic, cheap_filter, coverage, fair_share, score_topic
+from shorts.discovery.steam_news import fetch_steam_news
 from shorts.discovery.triage import story_text, triage
 from shorts.llm.base import AllProvidersExhausted, InvalidOutput
 from shorts.models import TopicStatus
@@ -73,6 +74,8 @@ def _run(settings, deps, conn, now, free_bytes, make) -> RunReport:
         return RunReport((), "low disk space", 0)
 
     items = fetch_all(deps.http, d.feeds, max_bytes=settings.limits.max_html_bytes)
+    items += fetch_steam_news(deps.http, d, since=now - timedelta(hours=d.max_age_h),
+                              max_bytes=settings.limits.max_html_bytes)
     recent = topics.recent_titles(d.history_days, now)
     kept, rejected = cheap_filter(items, seen_urls=topics.seen_urls(), recent_titles=recent, settings=d, now=now)
     for it, reason in rejected:
@@ -98,6 +101,8 @@ def _mentions(it: FeedItem, game_title: str) -> bool:
 
 
 def _steam_id(it: FeedItem, game_title: str | None, deps: PipelineDeps) -> int | None:
+    if it.steam_app_id is not None:
+        return it.steam_app_id  # posted on the game's own Steam page
     if not game_title:
         # press release feeds title a story with just the game's name: an exact store match is that game
         return find_steam_app_id(deps.http, it.title) if it.topic == "gaming" else None

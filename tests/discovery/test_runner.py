@@ -9,6 +9,7 @@ import respx
 
 from shorts.config import DiscoverySettings, FeedSource
 from shorts.discovery.runner import RunLocked, run_once
+from shorts.discovery.steam_news import NEWS_FEED_URL
 from shorts.discovery.triage import Triage, TriageBatch
 from shorts.llm.base import AllProvidersExhausted
 from shorts.models import TopicStatus, VideoFormat, VideoStatus
@@ -49,7 +50,7 @@ def verdict(index, interest, game=None, same=False):
 
 @pytest.fixture
 def cfg(settings):
-    return settings.model_copy(update={"discovery": DiscoverySettings(feeds=(HW, GAMES))})
+    return settings.model_copy(update={"discovery": DiscoverySettings(feeds=(HW, GAMES), steam_lists=())})
 
 
 def mock_feeds(hw=HW_ITEMS, games=GAME_ITEMS):
@@ -309,3 +310,18 @@ def test_tech_story_counts_its_newsroom_photos_as_footage(cfg, conn):
     run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 7)])]), FakeMake(conn))
     explanation = conn.execute("SELECT explanation FROM topics").fetchone()["explanation"]
     assert "footage 1.00" in explanation
+
+
+@respx.mock
+def test_steam_announcement_is_made_with_its_own_game_footage(cfg, conn):
+    from tests.discovery.test_steam_news import mock_list, row, steam_rss
+
+    mock_feeds(hw=[], games=[])
+    mock_list("topsellers", row(3764200, "Resident Evil Requiem"))
+    respx.get(NEWS_FEED_URL.format(app_id=3764200)).respond(200, text=steam_rss(("Free DLC out now", 2)))
+    search = respx.get(url__startswith="https://store.steampowered.com/api/storesearch/")
+    cfg = cfg.model_copy(update={"discovery": cfg.discovery.model_copy(update={"steam_lists": ("topsellers",)})})
+    make = FakeMake(conn)
+    run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 8, game="Resident Evil Requiem")])]), make)
+    assert make.calls[0][1] == 3764200 and not search.called
+    assert "Resident Evil Requiem: Free DLC out now" in make.calls[0][2].title

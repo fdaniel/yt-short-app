@@ -79,11 +79,16 @@ class FeedSource(_Frozen):
 DEFAULT_FEEDS = (
     FeedSource(name="NVIDIA Newsroom", url="https://nvidianews.nvidia.com/releases.xml", topic="hardware"),
     FeedSource(name="NVIDIA Blog", url="https://blogs.nvidia.com/feed/", topic="hardware"),
-    FeedSource(name="AMD Press Releases", url="https://ir.amd.com/news-events/press-releases/rss", topic="hardware"),
+    # AMD's newsroom, not its investor feed: Radeon, Ryzen and FSR launches are posted here
+    FeedSource(name="AMD Newsroom", url="https://newsroom.amd.com/feed/", topic="hardware"),
     # consumer tech newsrooms: launches of phones, PCs and gadgets, with official photos in each story
     FeedSource(name="Apple Newsroom", url="https://www.apple.com/newsroom/rss-feed.rss", topic="hardware"),
     FeedSource(name="Samsung Newsroom", url="https://news.samsung.com/global/feed", topic="hardware"),
     FeedSource(name="Google Blog", url="https://blog.google/rss/", topic="hardware"),
+    FeedSource(name="Windows Blog", url="https://blogs.windows.com/windowsexperience/feed/", topic="hardware"),
+    FeedSource(name="Meta Newsroom", url="https://about.fb.com/feed/", topic="hardware"),
+    FeedSource(name="Razer Newsroom", url="https://www.razer.com/newsroom/feed", topic="hardware"),
+    FeedSource(name="Garmin Newsroom", url="https://www.garmin.com/en-US/newsroom/rss/", topic="hardware"),
     FeedSource(name="Xbox Wire", url="https://news.xbox.com/en-us/feed/", topic="gaming"),
     FeedSource(name="PlayStation Blog", url="https://blog.playstation.com/feed/", topic="gaming"),
     FeedSource(name="Nintendo", url="https://www.nintendo.com/en-gb/news.xml", topic="gaming"),
@@ -105,15 +110,21 @@ class DiscoverySettings(_Frozen):
     max_videos_per_day: int = 6
     videos_per_run: int = 2
     max_attempts_per_run: int = 4
-    triage_batch: int = 15
+    triage_batch: int = 20
     min_score: float = 0.55
     min_free_gb: float = 10
     history_days: int = 14
     duplicate_similarity: float = 0.5
     weights: ScoreWeights = ScoreWeights()
+    # popular games' own Steam announcements, from Steam's store lists (empty = off)
+    steam_lists: tuple[str, ...] = ("popularwishlist", "topsellers")
+    steam_games_per_list: int = 25
     exclude_keywords: tuple[str, ...] = (
         "financial results", "quarter", "dividend", "board of directors", "appoints", "conference call",
         "podcast", "share of the week", "for southeast asia", "earnings",
+        # routine game-page posts
+        "patch notes", "hotfix", "maintenance", "known issues", "bug fixes", "client update",
+        "screenshot competition", "[notice]",
     )
 
 
