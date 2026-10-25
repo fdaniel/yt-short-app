@@ -52,3 +52,20 @@ def test_partial_fact_check_is_not_a_pass():
     llm = ScriptedLLM([two_claims, one_ok, two_claims, one_ok])
     with pytest.raises(ScriptRejected):
         write_checked_script(article(), VideoFormat.NEWS_FLASH, llm, SMALL)
+
+
+def test_a_rewrite_for_length_shows_the_narration_to_shorten():
+    too_long = draft(body=[" ".join(["word"] * 150), "Second fact here.", "Third fact here."])
+    llm = ScriptedLLM([too_long, GOOD, OK])
+    assert write_checked_script(article(), VideoFormat.NEWS_FLASH, llm, SMALL) == GOOD
+    assert "too long" in llm.prompts[1] and "word word word" in llm.prompts[1]
+
+
+def test_only_wrong_length_gets_two_more_tries_and_a_clean_message():
+    too_long = draft(body=[" ".join(["word"] * 150), "Second fact here.", "Third fact here."])
+    llm = ScriptedLLM([too_long, too_long, too_long, GOOD, OK])
+    assert write_checked_script(article(), VideoFormat.NEWS_FLASH, llm, SMALL) == GOOD
+    llm = ScriptedLLM([too_long] * 4)
+    with pytest.raises(ScriptRejected) as e:
+        write_checked_script(article(), VideoFormat.NEWS_FLASH, llm, SMALL)
+    assert llm.calls == 4 and "too long" in str(e.value) and "previous narration" not in str(e.value)

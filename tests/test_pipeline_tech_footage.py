@@ -57,7 +57,7 @@ def test_tech_story_shows_the_game_it_names(settings, conn, synthetic_video):
     mock_photos(PHOTOS[:1])
     mock_cyberpunk(synthetic_video)
     stock = respx.get(url__startswith="https://pixabay.com/api/videos/")
-    draft = GOOD.model_copy(update={"games_named": ["Cyberpunk 2077"]})
+    draft = GOOD.model_copy(update={"hook": "FSR 4.1 is now in Cyberpunk 2077.", "games_named": ["Cyberpunk 2077"]})
     r = make_video(TECH, None, VideoFormat.NEWS_FLASH, settings.model_copy(update={"pixabay_api_key": "xk"}),
                    deps(draft), conn)
     assets = AssetRepository(conn).list_for_video(r.video_id)
@@ -73,7 +73,7 @@ def test_a_game_the_story_never_names_adds_nothing(settings, conn, synthetic_vid
     respx.get(TECH).respond(200, text=page(PHOTOS))
     mock_photos(PHOTOS)
     search = respx.get(url__startswith="https://store.steampowered.com/api/storesearch/")
-    draft = GOOD.model_copy(update={"games_named": ["Cyberpunk 2077"]})
+    draft = GOOD.model_copy(update={"hook": "Hollow Knight looks sharper than ever.", "games_named": ["Hollow Knight"]})
     r = make_video(TECH, None, VideoFormat.NEWS_FLASH, settings, deps(draft), conn)
     assert not search.called and AssetKind.TRAILER not in kinds_of(conn, r.video_id)
 
@@ -86,7 +86,7 @@ def test_a_one_word_title_needs_its_maker_named(settings, conn, synthetic_video)
     mock_cyberpunk(synthetic_video, name="Farlands", details={"1091500": {"success": True, "data": {
         "name": "Farlands", "developers": ["JanduSoft"], "publishers": ["JanduSoft"],
         "movies": [], "screenshots": [{"path_full": "https://shared.akamai.steamstatic.com/ss.jpg"}]}}})
-    draft = GOOD.model_copy(update={"games_named": ["Farlands"]})
+    draft = GOOD.model_copy(update={"hook": "Farlands mode is coming soon.", "games_named": ["Farlands"]})
     r = make_video(TECH, None, VideoFormat.NEWS_FLASH, settings, deps(draft), conn)
     kinds = kinds_of(conn, r.video_id)
     assert AssetKind.TRAILER not in kinds and AssetKind.SCREENSHOT not in kinds
@@ -101,3 +101,14 @@ def test_game_news_does_not_look_for_other_games(settings, conn):
     draft = GOOD.model_copy(update={"games_named": ["Cyberpunk 2077"]})
     make_video(NEWS, 2, VideoFormat.NEWS_FLASH, settings, deps(draft), conn)
     assert not search.called
+
+
+@respx.mock
+def test_a_game_only_listed_after_the_hook_gets_no_footage(settings, conn, synthetic_video):
+    # GeForce NOW's weekly list: Final Fantasy footage played while the narration said "Call of Duty"
+    respx.get(TECH).respond(200, text=page(PHOTOS, extra=GAME_LINE))
+    mock_photos(PHOTOS)
+    search = respx.get(url__startswith="https://store.steampowered.com/api/storesearch/")
+    draft = GOOD.model_copy(update={"games_named": ["Cyberpunk 2077"]})  # GOOD's hook is about the RTX 5090
+    r = make_video(TECH, None, VideoFormat.NEWS_FLASH, settings, deps(draft), conn)
+    assert not search.called and AssetKind.TRAILER not in kinds_of(conn, r.video_id)

@@ -26,7 +26,7 @@ SCREENSHOTS_PER_GAME = 4
 _ERRORS = (SteamError, httpx.HTTPError, ValueError, OSError, FFmpegError, DownloadTooLarge, UnsafeURLError)
 
 
-def _named_in(name: str, text: str) -> bool:
+def named_in(name: str, text: str) -> bool:
     wanted = normalise_title(name)
     return bool(wanted) and f" {wanted} " in f" {normalise_title(text)} "
 
@@ -54,7 +54,7 @@ def named_game_assets(names: list[str], text: str, client: httpx.Client, work_di
     for name in dict.fromkeys(names):
         if games >= MAX_NAMED_GAMES:
             break
-        if not _named_in(name, text):
+        if not named_in(name, text):
             log.warning("AI named game %r but the story does not mention it; no footage from it", name)
             continue
         try:

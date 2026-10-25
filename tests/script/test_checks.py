@@ -126,3 +126,11 @@ def test_quote_shortened_with_an_ellipsis_matches_when_every_part_is_verbatim():
 def test_ellipsis_does_not_excuse_invented_words():
     quote = "The RTX 5090 launches January 30... It has 64GB of memory."
     assert quotes_missing(draft(claims=[Claim(text="x", source_quote=quote)]), SOURCE) == [quote]
+
+
+def test_length_feedback_says_how_many_words_to_cut_or_add():
+    video = VideoSettings(min_words=55, max_words=65)
+    long_draft = draft(hook=" ".join(["word"] * 9), body=[" ".join(["word"] * 20)] * 3, closing="last")
+    assert "cut at least 5 words" in length_problems(long_draft, video)[0]  # 70 words
+    short_draft = draft(hook="a b", body=["c", "d", "e"], closing="f")
+    assert "add at least 49 words" in length_problems(short_draft, video)[0]  # 6 words

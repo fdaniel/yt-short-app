@@ -13,6 +13,18 @@ FORMAT_GUIDES: dict[VideoFormat, str] = {
     VideoFormat.WHAT_CHANGED: "List the concrete differences from before, most important first.",
     VideoFormat.RELEASE_ROUNDUP: "Dates, platforms and prices, clearly separated.",
 }
+BODY_SENTENCES = 4
+HOOK_WORDS = 10  # typical: at most 12
+CLOSING_WORDS = 6
+
+
+def sentence_plan(video: VideoSettings) -> str:
+    """A shape that adds up to the lower part of the word range: a model keeps to sentence counts far
+    better than to a word count, and still runs a little long (asked for 55-65 words, it wrote 63-90)."""
+    target = video.min_words + (video.max_words - video.min_words) // 4
+    per = round((target - HOOK_WORDS - CLOSING_WORDS) / BODY_SENTENCES)
+    return (f"a hook of at most 12 words, exactly {BODY_SENTENCES} body sentences of {per - 1} to {per + 1} "
+            f"words each, and a closing of {CLOSING_WORDS - 1} to {CLOSING_WORDS + 2} words")
 
 
 def build_script_prompt(
@@ -23,7 +35,8 @@ def build_script_prompt(
 Rules:
 - Write in English.
 - Use only facts from the SOURCE below. Do not add anything you know from elsewhere.
-- Total narration (hook + body + closing) must be {video.min_words}-{video.max_words} words.
+- Total narration (hook + body + closing) must be {video.min_words}-{video.max_words} words. Shape it as
+  {sentence_plan(video)}. A story with many items (games, devices) keeps only the most important ones.
 - The hook is at most 12 words, names the game or product (for an expansion or update, the main game too,
   e.g. its full name), and leads with the most striking concrete fact in the SOURCE (a new feature, a
   number, a surprise), not just that it is out or announced. No exaggeration.
@@ -39,8 +52,8 @@ Rules:
 - footage_queries: 2 to 4 stock-video search terms of 2-3 words that show what the story itself is about
   (the kind of product, its use, its setting), generic objects or scenes only: no brand or product names,
   no people. Never use terms that have nothing to do with this story.
-- games_named: the video games the SOURCE names, up to 3, each title copied exactly as the SOURCE writes it;
-  [] if it names none. Never a feature, mode, map, update or product name.
+- games_named: the video games your narration names, the hook's game first, up to 3, each title copied
+  exactly as the SOURCE writes it; [] if it names none. Never a feature, mode, map, update or product name.
 - Format: {FORMAT_GUIDES[fmt]}
 """
     fixes = ""

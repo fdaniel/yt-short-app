@@ -21,10 +21,13 @@ def word_count(draft: ScriptDraft) -> int:
 
 def length_problems(draft: ScriptDraft, video: VideoSettings) -> list[str]:
     words = word_count(draft)
+    # say how far off it is: told only the limit, a model rewrites to about the same length
     if words < video.min_words:
-        return [f"narration too short: {words} words (minimum {video.min_words})"]
+        return [f"narration too short: {words} words (minimum {video.min_words}): "
+                f"add at least {video.min_words - words} words of facts from the SOURCE"]
     if words > video.max_words:
-        return [f"narration too long: {words} words (maximum {video.max_words})"]
+        return [f"narration too long: {words} words (maximum {video.max_words}): "
+                f"cut at least {words - video.max_words} words, e.g. shorten or drop a body sentence"]
     return []
 
 

@@ -30,7 +30,7 @@ from shorts.script.schema import ScriptDraft
 from shorts.script.writer import write_checked_script
 from shorts.sources import pexels, pixabay
 from shorts.sources.article import Article, fetch_article
-from shorts.sources.named_games import named_game_assets
+from shorts.sources.named_games import named_game_assets, named_in
 from shorts.sources.press import collect_press_images
 from shorts.sources.press_video import collect_press_clips
 from shorts.sources.stock import MAX_CLIPS, StockSource, collect_stock_assets
@@ -206,10 +206,14 @@ def _press_assets(article: Article, job: _Job) -> list[Asset]:
 
 
 def _named_game_assets(draft: ScriptDraft, article: Article, job: _Job, blocked: set[str]) -> list[Asset]:
-    """A tech story's footage from the games it names; game news already has its own game's footage."""
-    if job.steam_app_id is not None or not draft.games_named:
+    """Footage of the game a tech story is about: one the hook names ("FSR 4.1 now in Cyberpunk 2077").
+    A game only listed later gets none: its footage would play while the narration talks about another.
+    Game news already has its own game's footage."""
+    hook = narration_lines(draft)[0]
+    names = [name for name in draft.games_named if named_in(name, hook)]
+    if job.steam_app_id is not None or not names:
         return []
-    return named_game_assets(draft.games_named, f"{article.title} {article.text}", job.deps.http,
+    return named_game_assets(names, f"{article.title} {article.text}", job.deps.http,
                              job.work / "games", job.settings, blocked)
 
 
