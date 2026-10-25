@@ -119,6 +119,9 @@ class DiscoverySettings(_Frozen):
     # popular games' own Steam announcements, from Steam's store lists (empty = off)
     steam_lists: tuple[str, ...] = ("popularwishlist", "topsellers")
     steam_games_per_list: int = 25
+    # this week's free games on the Epic Games Store, priced for this store country
+    epic_free_games: bool = True
+    epic_country: str = "US"
     exclude_keywords: tuple[str, ...] = (
         "financial results", "quarter", "dividend", "board of directors", "appoints", "conference call",
         "podcast", "share of the week", "for southeast asia", "earnings",
@@ -134,6 +137,9 @@ class YouTubeSettings(_Frozen):
     synthetic_media: bool = False  # YouTube's "altered or synthetic content" label
     # set to true once Google approves the YouTube API audit: before that a scheduled upload stays private forever
     audit_approved: bool = False
+    # a line in every description, e.g. where to find game deals; with affiliate links it must say so
+    # ("affiliate links: we may earn a commission"), as YouTube and EU rules require
+    description_footer: str = ""
 
 
 class Settings(_Frozen):

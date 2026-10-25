@@ -144,7 +144,7 @@ def _produce(job: _Job) -> VideoResult:
     music = next((a.local_path for a in assets if a.kind == AssetKind.MUSIC), None)
     video_path = render_video(items, narration, ass, music, export / "video.mp4", s)
 
-    meta = build_metadata(draft, article, assets)
+    meta = build_metadata(draft, article, assets, footer=s.youtube.description_footer)
     metadata_path = write_metadata(meta, export / "metadata.json")
     videos.save_output(job.video_id, video_path, metadata_path, content_hash(video_path, meta))
     videos.set_status(job.video_id, VideoStatus.AWAITING_APPROVAL)

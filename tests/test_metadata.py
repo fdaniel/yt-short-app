@@ -93,3 +93,11 @@ def test_stock_footage_names_the_site_it_came_from(make_asset):
                       source_url="https://pixabay.com/videos/laptop-201/", rights_basis=RightsBasis.LICENSED)
     m = build_metadata(draft(), article(), [clip])
     assert "Stock footage: Carla Reis via Pixabay (https://pixabay.com/videos/laptop-201/)" in m.description
+
+
+def test_the_channel_footer_follows_the_story_and_comes_before_the_credits():
+    footer = "Game deals on the channel page (affiliate links: we may earn a commission)."
+    m = build_metadata(draft(), article(), [], footer=footer)
+    story, rest = m.description.split("\n\n", 1)
+    assert rest.startswith(footer + "\n\nSource: ")
+    assert build_metadata(draft(), article(), []).description.split("\n\n")[1].startswith("Source: ")

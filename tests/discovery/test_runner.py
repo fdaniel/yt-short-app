@@ -50,7 +50,7 @@ def verdict(index, interest, game=None, same=False):
 
 @pytest.fixture
 def cfg(settings):
-    return settings.model_copy(update={"discovery": DiscoverySettings(feeds=(HW, GAMES), steam_lists=())})
+    return settings.model_copy(update={"discovery": DiscoverySettings(feeds=(HW, GAMES), steam_lists=(), epic_free_games=False)})
 
 
 def mock_store(name="Call of Duty®: Modern Warfare® 4", developers=("Infinity Ward",), publishers=("Activision",)):

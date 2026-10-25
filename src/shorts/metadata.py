@@ -83,10 +83,11 @@ def _rights(assets: list[Asset]) -> tuple[dict, ...]:
     )
 
 
-def build_metadata(draft: ScriptDraft, article: Article, assets: list[Asset]) -> VideoMetadata:
+def build_metadata(draft: ScriptDraft, article: Article, assets: list[Asset], *, footer: str = "") -> VideoMetadata:
     titles = _titles(draft, article)
     hashtags = _hashtags(draft)
-    tail = "\n\n" + "\n".join(_credits(article, assets)) + ("\n\n" + " ".join(hashtags) if hashtags else "")
+    channel = f"\n\n{_clean(footer)}" if footer.strip() else ""
+    tail = channel + "\n\n" + "\n".join(_credits(article, assets)) + ("\n\n" + " ".join(hashtags) if hashtags else "")
     body = _clean(draft.description)[: MAX_DESCRIPTION - len(tail)]
     return VideoMetadata(
         title=titles[0],

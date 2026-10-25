@@ -47,6 +47,7 @@ class SteamApp:
     movies: tuple[SteamMovie, ...]
     screenshots: tuple[str, ...]
     developers: tuple[str, ...] = ()
+    about: str = ""  # the store page's short description
 
 
 def _parse_movie(raw: dict) -> SteamMovie:
@@ -72,6 +73,7 @@ def parse_appdetails(app_id: int, payload: dict) -> SteamApp:
         movies=tuple(_parse_movie(m) for m in data.get("movies") or ()),
         screenshots=tuple(s["path_full"] for s in data.get("screenshots") or () if s.get("path_full")),
         developers=tuple(data.get("developers") or ()),
+        about=" ".join(str(data.get("short_description") or "").split()),
     )
 
 

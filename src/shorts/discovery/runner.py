@@ -13,6 +13,7 @@ from pathlib import Path
 import httpx
 
 from shorts.config import Settings
+from shorts.discovery.epic_free import fetch_free_games
 from shorts.discovery.feeds import FeedItem, article_from_item, fetch_all
 from shorts.discovery.score import ScoredTopic, cheap_filter, coverage, fair_share, score_topic
 from shorts.discovery.steam_news import fetch_steam_news
@@ -81,6 +82,7 @@ def _run(settings, deps, conn, now, free_bytes, make) -> RunReport:
     items = fetch_all(deps.http, d.feeds, max_bytes=settings.limits.max_html_bytes)
     items += fetch_steam_news(deps.http, d, since=now - timedelta(hours=d.max_age_h),
                               max_bytes=settings.limits.max_html_bytes)
+    items += fetch_free_games(deps.http, d, now=now, max_bytes=settings.limits.max_html_bytes)
     recent = topics.recent_titles(d.history_days, now)
     kept, rejected = cheap_filter(items, seen_urls=topics.seen_urls(), recent_titles=recent, settings=d, now=now)
     for it, reason in rejected:
