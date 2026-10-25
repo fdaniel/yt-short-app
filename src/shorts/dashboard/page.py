@@ -39,7 +39,7 @@ a { color:inherit; text-underline-offset:3px; }
 header { border-bottom:1px solid var(--line); background:var(--card); }
 header .wrap { display:flex; flex-wrap:wrap; align-items:center; gap:10px 28px; padding-top:14px; padding-bottom:14px; }
 .brand { display:flex; align-items:center; gap:12px; margin-right:auto; text-decoration:none; }
-.mark { width:40px; height:40px; border-radius:50%; background:var(--brand); color:var(--brand-ink); display:grid;
+.mark { width:40px; height:40px; border-radius:50%; background:#f4511e; color:#fff; display:grid;
   place-items:center; font:700 17px/1 var(--hud); letter-spacing:.02em; }
 .brand strong { font:600 22px/1 var(--hud); font-stretch:semi-condensed; display:block; }
 .brand span { color:var(--steel); font-size:13px; }
