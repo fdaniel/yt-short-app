@@ -7,6 +7,7 @@ from html import escape
 
 from shorts.dashboard.app import TABS, DashboardView, VideoCard
 from shorts.models import VideoStatus
+from shorts.script.take import MAX_TAKE_WORDS
 
 YOUTUBE_UPLOAD_URL = "https://www.youtube.com/upload"
 YOUTUBE_STUDIO_URL = "https://studio.youtube.com"
@@ -115,8 +116,27 @@ def _texts(card: VideoCard) -> str:
             + _copy_field(f"tags-{vid}", "Hashtags", " ".join(map(str, meta.get("hashtags", []))), 1))
 
 
+def _take(card: VideoCard, view: DashboardView, token: str) -> str:
+    """The owner's own closing line: real human input in every video, which YouTube's monetization review looks for."""
+    vid = card.record.id
+    current = card.meta.get("owner_take")
+    shown = f'<p>Your take in this video: <strong>{escape(str(current))}</strong></p>' if current else ""
+    note = f'<p class="{"ok" if "was added" in card.take_note else "bad"}">{escape(card.take_note)}</p>' if card.take_note else ""
+    if not view.takes:
+        return shown
+    form = _form(vid, "take", token, view.tab,
+                 f'<label for="take-{vid}">Your take: one sentence of your own opinion, up to {MAX_TAKE_WORDS} words.'
+                 " It replaces the closing line and the video is made again.</label>"
+                 f'<span class="row"><input type="text" id="take-{vid}" name="take" maxlength="120"'
+                 ' placeholder="Worth it if you liked Hades" required><button>Add my take</button></span>')
+    return shown + note + form
+
+
 def _review_actions(card: VideoCard, view: DashboardView, token: str) -> str:
     vid, tab = card.record.id, view.tab
+    if card.take_busy:
+        return ('<p class="muted">Adding your take: the video is being voiced and rendered again, which takes a'
+                " minute or two. Reload this page to check.</p>")
     if view.channel:
         auto = _form(vid, "upload", token, tab,
                      f'<button class="primary">Upload to {escape(view.channel.title)}</button>',
@@ -140,7 +160,7 @@ def _review_actions(card: VideoCard, view: DashboardView, token: str) -> str:
     )
     discard = _form(vid, "discard", token, tab, '<button class="danger">Discard</button>',
                     f"Discard video #{vid}? Its video file will be deleted.")
-    return f'<div class="row">{auto}{discard}</div>{by_hand}'
+    return f'{_take(card, view, token)}<div class="row">{auto}{discard}</div>{by_hand}'
 
 
 def _schedule_form(vid: int, token: str, tab: str, view: DashboardView) -> str:

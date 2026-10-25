@@ -228,3 +228,61 @@ def test_schedule_failure_leaves_video_for_review(settings, make_ready_video):
     account = FakeAccount(error=YouTubeError("YouTube refused the upload: quota"))
     assert "quota" in _dash(_approved(settings), account).schedule(vid, _in(days=1))
     assert _status(settings, vid).status == VideoStatus.AWAITING_APPROVAL
+
+
+class Remaker:
+    """Stands in for the real re-make; runs at once instead of in the background."""
+
+    def __init__(self, error=None):
+        self.calls, self.error = [], error
+
+    def __call__(self, video_id, take):
+        self.calls.append((video_id, take))
+        if self.error:
+            raise self.error
+
+
+def _take_dash(settings, remake, background=lambda job: job()):
+    return Dashboard(settings, FakeAccount(), opener=print, remake=remake, background=background)
+
+
+def test_a_take_is_checked_then_the_video_is_remade(settings, make_ready_video):
+    vid, remake = make_ready_video(), Remaker()
+    dash = _take_dash(settings, remake)
+    assert "being re-made" in dash.add_take(vid, "  worth it if you liked Hades ")
+    assert remake.calls == [(vid, "worth it if you liked Hades.")]
+    [card] = dash.view("review").cards
+    assert "added" in card.take_note and not card.take_busy
+
+
+def test_an_unusable_take_changes_nothing(settings, make_ready_video):
+    vid, remake = make_ready_video(), Remaker()
+    message = _take_dash(settings, remake).add_take(vid, "see https://example.com")
+    assert "No links" in message and remake.calls == []
+
+
+def test_a_failed_remake_is_shown_on_the_card(settings, make_ready_video):
+    from shorts.pipeline import PipelineError
+
+    vid = make_ready_video()
+    dash = _take_dash(settings, Remaker(PipelineError("Your take was not added: narration is 37.0s")))
+    dash.add_take(vid, "Worth it if you liked Hades")
+    [card] = dash.view("review").cards
+    assert card.take_note == "Your take was not added: narration is 37.0s"
+
+
+def test_a_video_being_remade_cannot_be_published_discarded_or_remade_again(settings, make_ready_video):
+    vid, jobs = make_ready_video(), []
+    dash = _take_dash(settings, Remaker(), background=jobs.append)  # the re-make has not run yet
+    dash.add_take(vid, "Worth it if you liked Hades")
+    assert dash.view("review").cards[0].take_busy
+    for message in (dash.upload(vid), dash.discard(vid), dash.add_take(vid, "Another take for this one")):
+        assert "being re-made" in message
+    assert _status(settings, vid).status == VideoStatus.AWAITING_APPROVAL
+    jobs[0]()
+    assert not dash.view("review").cards[0].take_busy
+
+
+def test_takes_need_a_video_waiting_for_review(settings, make_ready_video):
+    vid = make_ready_video(status=VideoStatus.DISCARDED)
+    assert "discarded" in _take_dash(settings, Remaker()).add_take(vid, "Worth it if you liked Hades")

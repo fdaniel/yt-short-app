@@ -2,6 +2,8 @@
 
 import subprocess
 import sys
+import threading
+from collections.abc import Callable
 from pathlib import Path
 
 from shorts.config import Settings
@@ -21,9 +23,34 @@ def _account(settings: Settings) -> YouTubeAccount:
     return YouTubeAccount(settings.data_dir / "youtube")
 
 
+def _remaker(settings: Settings) -> Callable[[int, str], None]:
+    """Re-makes a video with the owner's take, one at a time; the voice model loads on the first take only."""
+    lock, loaded = threading.Lock(), {}
+
+    def remake(video_id: int, take: str) -> None:
+        from shorts.llm.chain import build_llm
+        from shorts.net import build_http_client
+        from shorts.pipeline import PipelineDeps, remake_with_take
+        from shorts.storage.db import connect
+        from shorts.voice.tts import KokoroTTS
+
+        with lock:
+            if "deps" not in loaded:
+                http = build_http_client(settings)
+                loaded["deps"] = PipelineDeps(http=http, llm=build_llm(settings, http), tts=KokoroTTS(settings.voice.speed))
+            conn = connect(settings.data_dir / "shorts.db")
+            try:
+                remake_with_take(video_id, take, settings, loaded["deps"], conn)
+            finally:
+                conn.close()
+
+    return remake
+
+
 def dashboard_command(settings: Settings, port: int, open_browser: bool) -> int:
     try:
-        server = DashboardServer(Dashboard(settings, _account(settings), opener=open_on_windows), port=port)
+        dashboard = Dashboard(settings, _account(settings), opener=open_on_windows, remake=_remaker(settings))
+        server = DashboardServer(dashboard, port=port)
     except OSError as exc:
         print(f"Could not start the dashboard on port {port} ({exc}). Is it already open? "
               f"Otherwise try another port: --port {port + 1}", file=sys.stderr)

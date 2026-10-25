@@ -164,3 +164,19 @@ def test_schedule_form_is_routed(client, server, make_ready_video):
     page = client.post(f"/videos/{vid}/schedule", data={"token": server.token, "publish_at": "2026-10-24T13:00"},
                        follow_redirects=True)
     assert page.status_code == 200 and "approves" in page.text
+
+
+def test_take_form_is_routed(settings, make_ready_video):
+    calls = []
+    srv = DashboardServer(Dashboard(settings, FakeAccount(), opener=print, remake=lambda *a: calls.append(a),
+                                    background=lambda job: job()), port=0)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        vid = make_ready_video()
+        with httpx.Client(base_url=f"http://127.0.0.1:{srv.server_address[1]}") as c:
+            r = c.post(f"/videos/{vid}/take", data={"token": srv.token, "take": "Worth it if you liked Hades"},
+                       headers={"Host": f"localhost:{srv.server_address[1]}"})
+        assert r.status_code == 303 and calls == [(vid, "Worth it if you liked Hades.")]
+    finally:
+        srv.shutdown()
+        srv.server_close()

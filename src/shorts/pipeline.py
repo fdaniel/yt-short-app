@@ -1,10 +1,11 @@
 """One news URL in, one rights-logged, fact-checked vertical video out."""
 
+import json
 import logging
 import random
 import shutil
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from itertools import chain, zip_longest
 from pathlib import Path
@@ -130,6 +131,46 @@ def _produce(job: _Job) -> VideoResult:
     videos.set_status(job.video_id, VideoStatus.FACT_CHECKED)
 
     videos.set_status(job.video_id, VideoStatus.RENDERING)
+    result = _render(job, draft, article)
+    videos.set_status(job.video_id, VideoStatus.AWAITING_APPROVAL)
+    return result
+
+
+def remake_with_take(video_id: int, take: str, settings: Settings, deps: PipelineDeps,
+                     conn: sqlite3.Connection) -> VideoResult:
+    """The video again with the owner's own sentence as its closing line: same script, new voice-over and
+    render. The current video stays as it is until the new one is ready, and when this fails."""
+    videos, assets = VideoRepository(conn), AssetRepository(conn)
+    record = videos.get(video_id)
+    if record.status != VideoStatus.AWAITING_APPROVAL or not record.script_json:
+        raise PipelineError(f"Video #{video_id} is no longer waiting for review.")
+    try:
+        saved = settings.data_dir / "exports" / str(video_id) / "article.json"
+        article = Article(**json.loads(saved.read_text(encoding="utf-8")))
+    except (OSError, ValueError, TypeError) as exc:
+        raise PipelineError(f"Video #{video_id} was made before takes were possible: its story was not kept.") from exc
+    draft = ScriptDraft.model_validate_json(record.script_json).model_copy(update={"closing": take})
+    work = settings.data_dir / "work" / f"{video_id}-take"
+    job = _Job(video_id, record.news_url, record.steam_app_id, record.format, settings, deps, conn, work, article)
+    last_old_row = assets.last_id()
+    try:
+        result = _render(job, draft, article, take=take)
+    except Exception as exc:
+        log.exception("Adding a take to video %s failed", video_id)
+        assets.delete_for_video(video_id, after=last_old_row)
+        raise PipelineError(f"Your take was not added: {str(exc) or type(exc).__name__}") from exc
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+    assets.delete_for_video(video_id, through=last_old_row)
+    videos.save_script(video_id, draft.model_dump_json(), record.title or draft.title_options[0])
+    return result
+
+
+def _render(job: _Job, draft: ScriptDraft, article: Article, *, take: str = "") -> VideoResult:
+    """Voice, footage and render into the work folder; the finished files replace the exported ones at once."""
+    videos = VideoRepository(job.conn)
+    s = job.settings
+    job.work.mkdir(parents=True, exist_ok=True)
     narration = _narrate(draft, job)
     visuals = _gather_visuals(draft, article, job, narration.duration)
     assets = visuals.assets
@@ -139,16 +180,21 @@ def _produce(job: _Job) -> VideoResult:
         slot_s=s.video.slot_s, max_shot_s=s.video.max_shot_s, max_trailer_share=s.video.max_trailer_share,
     )
     ass = write_ass(chunk_captions(narration), _credit(assets, article), job.work / "captions.ass")
+    music = next((a.local_path for a in assets if a.kind == AssetKind.MUSIC), None)
+    rendered = render_video(items, narration, ass, music, job.work / "video.mp4", s)
+
+    meta = build_metadata(draft, article, assets, footer=s.youtube.description_footer, take=take)
+    digest = content_hash(rendered, meta)
+    # the story itself is kept, so the owner can add a take to the video later
+    (job.work / "article.json").write_text(json.dumps(asdict(article), ensure_ascii=False), encoding="utf-8")
+    ready = {"video.mp4": rendered, "metadata.json": write_metadata(meta, job.work / "metadata.json"),
+             "article.json": job.work / "article.json"}
     export = s.data_dir / "exports" / str(job.video_id)
     export.mkdir(parents=True, exist_ok=True)
-    music = next((a.local_path for a in assets if a.kind == AssetKind.MUSIC), None)
-    video_path = render_video(items, narration, ass, music, export / "video.mp4", s)
-
-    meta = build_metadata(draft, article, assets, footer=s.youtube.description_footer)
-    metadata_path = write_metadata(meta, export / "metadata.json")
-    videos.save_output(job.video_id, video_path, metadata_path, content_hash(video_path, meta))
-    videos.set_status(job.video_id, VideoStatus.AWAITING_APPROVAL)
-    return VideoResult(job.video_id, video_path, metadata_path)
+    for name, path in ready.items():
+        path.replace(export / name)
+    videos.save_output(job.video_id, export / "video.mp4", export / "metadata.json", digest)
+    return VideoResult(job.video_id, export / "video.mp4", export / "metadata.json")
 
 
 def _narrate(draft: ScriptDraft, job: _Job) -> Narration:

@@ -91,3 +91,37 @@ def test_schedule_explains_it_waits_for_google(settings, make_ready_video):
     make_ready_video()
     html = _html(settings)
     assert 'name="publish_at"' not in html and "Scheduling here works once Google approves" in html
+
+
+def _take_html(settings, dash):
+    return render(dash.view("review"), token="TOKEN123")
+
+
+def test_review_card_offers_a_take_with_its_word_limit(settings, make_ready_video):
+    vid = make_ready_video()
+    dash = Dashboard(settings, FakeAccount(), opener=print, remake=lambda *_: None)
+    html = _take_html(settings, dash)
+    assert f'action="/videos/{vid}/take"' in html and 'name="take"' in html and "up to 12 words" in html
+
+
+def test_card_shows_a_take_in_progress_and_hides_publishing(settings, make_ready_video):
+    vid = make_ready_video()
+    dash = Dashboard(settings, FakeAccount(), opener=print, remake=lambda *_: None, background=lambda job: None)
+    dash.add_take(vid, "Worth it if you liked <i>Hades</i>")
+    html = _take_html(settings, dash)
+    assert "Adding your take" in html and f'action="/videos/{vid}/upload"' not in html
+
+
+def test_card_shows_how_the_last_take_went_and_the_take_itself(settings, make_ready_video):
+    vid = make_ready_video()
+    meta = settings.data_dir / "exports" / str(vid) / "metadata.json"
+    meta.write_text(meta.read_text().replace('"title":', '"owner_take": "Worth it <b>now</b>.", "title":'))
+    dash = Dashboard(settings, FakeAccount(), opener=print, remake=lambda *_: None, background=lambda job: job())
+    dash.add_take(vid, "Worth it if you liked Hades")
+    html = _take_html(settings, dash)
+    assert "Your take was added" in html and "Worth it &lt;b&gt;now&lt;/b&gt;." in html
+
+
+def test_no_take_form_without_a_remaker(settings, make_ready_video):
+    vid = make_ready_video()
+    assert f'action="/videos/{vid}/take"' not in _html(settings)

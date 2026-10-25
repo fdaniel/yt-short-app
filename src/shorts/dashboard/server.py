@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 MAX_FORM_BYTES = 10_000
 CHUNK = 256 * 1024
 _VIDEO = re.compile(r"/videos/(\d{1,9})\.mp4")
-_ACTION = re.compile(r"/videos/(\d{1,9})/(upload|schedule|mark-uploaded|discard|open-folder|back-to-review)")
+_ACTION = re.compile(r"/videos/(\d{1,9})/(upload|schedule|mark-uploaded|discard|open-folder|back-to-review|take)")
 _RANGE = re.compile(r"bytes=(\d{0,18})-(\d{0,18})")
 _SECURITY_HEADERS = {
     "X-Frame-Options": "DENY",
@@ -180,6 +180,7 @@ class _Handler(BaseHTTPRequestHandler):
             "discard": lambda: dashboard.discard(video_id),
             "open-folder": lambda: dashboard.open_folder(video_id),
             "back-to-review": lambda: dashboard.back_to_review(video_id),
+            "take": lambda: dashboard.add_take(video_id, form.get("take", "")),
         }
         try:
             self.server.set_notice(actions[action]())

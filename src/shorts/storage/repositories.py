@@ -171,6 +171,15 @@ class AssetRepository:
             )
         return replace(asset, id=int(cur.lastrowid))
 
+    def last_id(self) -> int:
+        return self._conn.execute("SELECT COALESCE(MAX(id), 0) FROM assets").fetchone()[0]
+
+    def delete_for_video(self, video_id: int, *, after: int = 0, through: int | None = None) -> None:
+        """A video's rights-log rows with ids in (after, through]: those of a render that was replaced or failed."""
+        with self._conn:
+            self._conn.execute("DELETE FROM assets WHERE video_id = ? AND id > ? AND id <= ?",
+                               (video_id, after, self.last_id() if through is None else through))
+
     def used_source_urls(self, kind: AssetKind) -> set[str]:
         """Source pages of this kind in videos that are, or may still become, public."""
         never_public = (VideoStatus.FAILED, VideoStatus.DISCARDED, VideoStatus.EXPIRED)

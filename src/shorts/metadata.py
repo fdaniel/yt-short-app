@@ -26,6 +26,7 @@ class VideoMetadata:
     hashtags: tuple[str, ...]
     sources: tuple[str, ...]
     rights: tuple[dict, ...]
+    owner_take: str = ""  # the owner's own closing line, when they added one
 
 
 def _clean(text: str) -> str:
@@ -83,7 +84,8 @@ def _rights(assets: list[Asset]) -> tuple[dict, ...]:
     )
 
 
-def build_metadata(draft: ScriptDraft, article: Article, assets: list[Asset], *, footer: str = "") -> VideoMetadata:
+def build_metadata(draft: ScriptDraft, article: Article, assets: list[Asset], *, footer: str = "",
+                   take: str = "") -> VideoMetadata:
     titles = _titles(draft, article)
     hashtags = _hashtags(draft)
     channel = f"\n\n{_clean(footer)}" if footer.strip() else ""
@@ -96,6 +98,7 @@ def build_metadata(draft: ScriptDraft, article: Article, assets: list[Asset], *,
         hashtags=hashtags,
         sources=(article.url,),
         rights=_rights(assets),
+        owner_take=take,
     )
 
 

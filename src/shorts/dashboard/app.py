@@ -15,6 +15,7 @@ from shorts.config import Settings
 from shorts.dashboard.links import youtube_id_from
 from shorts.models import VideoStatus
 from shorts.publish.youtube import Channel, UploadResult, YouTubeError, upload_body
+from shorts.script.take import TakeError, clean_take
 from shorts.storage.db import connect
 from shorts.storage.repositories import InvalidTransition, VideoRecord, VideoRepository
 from shorts.storage.topics import TopicRepository
@@ -59,6 +60,8 @@ class VideoCard:
     source: str | None = None
     score: float | None = None
     explanation: str = ""
+    take_busy: bool = False  # the owner's take is being voiced into a new render
+    take_note: str = ""  # how the last take went
 
 
 @dataclass(frozen=True)
@@ -72,6 +75,7 @@ class DashboardView:
     run_lines: tuple[str, ...]
     privacy: str = "public"
     can_schedule: bool = False
+    takes: bool = False  # the owner can add their own closing line
 
 
 def _load_meta(path: Path | None) -> dict[str, Any]:
@@ -100,12 +104,23 @@ def _run_lines(log_path: Path) -> tuple[str, ...]:
     return tuple(lines[-RUN_LOG_LINES:])
 
 
+def _in_background(job: Callable[[], None]) -> None:
+    threading.Thread(target=job, name="take", daemon=True).start()
+
+
 class Dashboard:
-    def __init__(self, settings: Settings, account: Account, opener: Callable[[Path], object]) -> None:
+    def __init__(self, settings: Settings, account: Account, opener: Callable[[Path], object], *,
+                 remake: Callable[[int, str], None] | None = None,
+                 background: Callable[[Callable[[], None]], None] = _in_background) -> None:
         self._settings = settings
         self._account = account
         self._opener = opener
-        self._publish_lock = threading.Lock()
+        self._publish_lock = threading.RLock()  # also held while a take starts, so nothing publishes it meanwhile
+        self._remake = remake  # voices the owner's take into a new render (see pipeline.remake_with_take)
+        self._background = background
+        self._takes_lock = threading.Lock()
+        self._remaking: set[int] = set()
+        self._take_notes: dict[int, str] = {}
 
     @contextmanager
     def _db(self) -> Iterator[sqlite3.Connection]:
@@ -132,6 +147,7 @@ class Dashboard:
             run_lines=_run_lines(self._settings.data_dir / "run.log"),
             privacy=self._settings.youtube.privacy_status,
             can_schedule=self._settings.youtube.audit_approved,
+            takes=self._remake is not None,
         )
 
     def _card(self, record: VideoRecord, topics: TopicRepository) -> VideoCard:
@@ -143,7 +159,55 @@ class Dashboard:
             source=topic["source"] if topic else None,
             score=topic["score"] if topic else None,
             explanation=topic["explanation"] if topic else "",
+            take_busy=self._busy(record.id),
+            take_note=self._take_notes.get(record.id, ""),
         )
+
+    def _busy(self, video_id: int) -> bool:
+        with self._takes_lock:
+            return video_id in self._remaking
+
+    def _busy_message(self, video_id: int) -> str:
+        return f"Video #{video_id} is being re-made with your take: wait until it is back, then check it."
+
+    def add_take(self, video_id: int, text: str) -> str:
+        """The owner's own sentence becomes the closing line; the video is voiced and rendered again meanwhile."""
+        if self._remake is None:
+            return "Takes are not available in this dashboard."
+        try:
+            take = clean_take(text)
+        except TakeError as exc:
+            return f"Video #{video_id}: {exc}"
+        with self._publish_lock, self._db() as conn:
+            try:
+                record = VideoRepository(conn).get(video_id)
+            except KeyError:
+                return f"No video #{video_id}."
+            if record.status != VideoStatus.AWAITING_APPROVAL:
+                return _already(video_id, record.status)
+            with self._takes_lock:
+                if video_id in self._remaking:
+                    return self._busy_message(video_id)
+                self._remaking.add(video_id)
+                self._take_notes.pop(video_id, None)
+        self._background(lambda: self._run_take(video_id, take))
+        return (f"Video #{video_id} is being re-made with your take; it takes a minute or two. Reload this page,"
+                " then watch it again before publishing.")
+
+    def _run_take(self, video_id: int, take: str) -> None:
+        from shorts.pipeline import PipelineError  # the video-making stack loads only when a take is added
+
+        try:
+            self._remake(video_id, take)
+            note = f"Your take was added: “{take}” Watch the new version before publishing."
+        except PipelineError as exc:
+            note = str(exc)
+        except Exception as exc:  # a background job must report, never vanish
+            log.exception("Take for video #%d failed", video_id)
+            note = f"Your take was not added: {exc}"
+        with self._takes_lock:
+            self._remaking.discard(video_id)
+            self._take_notes[video_id] = note
 
     def _inside_data_dir(self, path: Path | None) -> Path | None:
         """Only files the pipeline exported are ever served or deleted."""
@@ -183,6 +247,8 @@ class Dashboard:
     def _upload(self, video_id: int, publish_at: datetime | None) -> str:
         """The row is claimed first, so no click, process or crash uploads twice."""
         with self._publish_lock, self._db() as conn:
+            if self._busy(video_id):
+                return self._busy_message(video_id)
             repo = VideoRepository(conn)
             try:
                 record = repo.get(video_id)
@@ -240,10 +306,13 @@ class Dashboard:
 
     def discard(self, video_id: int) -> str:
         """Discard and delete the video file (keeping its metadata) to free disk space."""
-        video = self.video_file(video_id)
-        changed, message = self._transition(
-            video_id, lambda repo: repo.set_status(video_id, VideoStatus.DISCARDED), f"Video #{video_id} discarded."
-        )
+        with self._publish_lock:
+            if self._busy(video_id):
+                return self._busy_message(video_id)
+            video = self.video_file(video_id)
+            changed, message = self._transition(
+                video_id, lambda repo: repo.set_status(video_id, VideoStatus.DISCARDED), f"Video #{video_id} discarded."
+            )
         if changed and video is not None:
             try:
                 video.unlink(missing_ok=True)
