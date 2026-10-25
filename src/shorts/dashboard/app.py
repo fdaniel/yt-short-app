@@ -63,6 +63,7 @@ class VideoCard:
     take_busy: bool = False  # the owner's take is being voiced into a new render
     take_note: str = ""  # how the last take went
     take_options: tuple[str, ...] = ()  # the AI's suggestions, for the owner to pick from only if they agree
+    script_lines: tuple[str, ...] = ()  # what the video says, hook first and closing last
 
 
 @dataclass(frozen=True)
@@ -88,14 +89,14 @@ def _load_meta(path: Path | None) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def _take_options(script_json: str | None) -> tuple[str, ...]:
-    """The script's take suggestions; none for older scripts or damaged JSON."""
+def _script(script_json: str | None):
+    """The video's script, or None for a missing or damaged one."""
     from shorts.script.schema import ScriptDraft
 
     try:
-        return tuple(ScriptDraft.model_validate_json(script_json).take_options) if script_json else ()
+        return ScriptDraft.model_validate_json(script_json) if script_json else None
     except ValueError:
-        return ()
+        return None
 
 
 def _run_lines(log_path: Path) -> tuple[str, ...]:
@@ -163,6 +164,7 @@ class Dashboard:
 
     def _card(self, record: VideoRecord, topics: TopicRepository) -> VideoCard:
         topic = topics.for_video(record.id)
+        script = _script(record.script_json)
         return VideoCard(
             record=record,
             meta=_load_meta(record.metadata_path),
@@ -172,7 +174,8 @@ class Dashboard:
             explanation=topic["explanation"] if topic else "",
             take_busy=self._busy(record.id),
             take_note=self._take_notes.get(record.id, ""),
-            take_options=_take_options(record.script_json) if record.status == VideoStatus.AWAITING_APPROVAL else (),
+            take_options=tuple(script.take_options) if script and record.status == VideoStatus.AWAITING_APPROVAL else (),
+            script_lines=(script.hook, *script.body, script.closing) if script else (),
         )
 
     def _busy(self, video_id: int) -> bool:

@@ -149,3 +149,21 @@ def test_no_suggestions_for_older_scripts(settings, make_ready_video):
     make_ready_video()  # its script is "{}"
     html = _take_html(settings, Dashboard(settings, FakeAccount(), opener=print, remake=lambda *_: None))
     assert 'class="suggest"' not in html
+
+
+def test_card_shows_what_the_video_says_with_the_take_marked(settings, make_ready_video):
+    from shorts.storage.db import connect
+    from shorts.storage.repositories import VideoRepository
+    from tests.script.drafts import draft
+
+    vid = make_ready_video()
+    script = draft(hook="The <RTX 5090> is official.", closing="Grab it if you play at 4K.")
+    conn = connect(settings.data_dir / "shorts.db")
+    VideoRepository(conn).save_script(vid, script.model_dump_json(), "RTX 5090 announced")
+    conn.close()
+    meta = settings.data_dir / "exports" / str(vid) / "metadata.json"
+    meta.write_text(meta.read_text().replace('"title":', '"owner_take": "Grab it if you play at 4K.", "title":'))
+    html = _html(settings)
+    assert "<li>The &lt;RTX 5090&gt; is official.</li>" in html
+    assert '<li class="take">Grab it if you play at 4K.</li>' in html
+    assert "Loadout Daily" in html and "Watch it" in html and "<summary>YouTube texts" in html

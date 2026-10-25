@@ -185,6 +185,7 @@ def test_dashboard_port_busy_is_friendly(tmp_path, capsys, monkeypatch):
         raise OSError(98, "Address already in use")
 
     monkeypatch.setattr(publish_cli, "DashboardServer", busy)
+    monkeypatch.setattr(publish_cli, "_dashboard_running", lambda port: False)  # another program has the port
     assert cli.main(["dashboard", "--no-open", "--config", str(write_config(tmp_path))]) == 1
     assert "--port" in capsys.readouterr().err
 
@@ -224,3 +225,18 @@ def test_youtube_connect_ctrl_c_is_calm(tmp_path, capsys, monkeypatch):
     monkeypatch.setattr(publish_cli.YouTubeAccount, "connect", interrupted)
     assert cli.main(["youtube-connect", "--config", str(write_config(tmp_path))]) == 1
     assert "cancelled" in capsys.readouterr().err.lower()
+
+
+def test_dashboard_already_running_is_simply_opened(tmp_path, capsys, monkeypatch):
+    # the desktop shortcut clicked again while the dashboard is open
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    opened = []
+
+    def busy(*args, **kwargs):
+        raise OSError(98, "Address already in use")
+
+    monkeypatch.setattr(publish_cli, "DashboardServer", busy)
+    monkeypatch.setattr(publish_cli, "_dashboard_running", lambda port: port == 8000)
+    monkeypatch.setattr(publish_cli, "open_on_windows", opened.append)
+    assert cli.main(["dashboard", "--config", str(write_config(tmp_path))]) == 0
+    assert opened == ["http://localhost:8000/"] and "already running" in capsys.readouterr().out

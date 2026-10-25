@@ -3,6 +3,7 @@
 import subprocess
 import sys
 import threading
+import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 
@@ -47,21 +48,41 @@ def _remaker(settings: Settings) -> Callable[[int, str], None]:
     return remake
 
 
+def _dashboard_running(port: int) -> bool:
+    """Our own dashboard answers on this port (the desktop shortcut was clicked while it is open)."""
+    request = urllib.request.Request(f"http://127.0.0.1:{port}/", headers={"Host": f"localhost:{port}"})
+    try:
+        with urllib.request.urlopen(request, timeout=3) as response:
+            return b"review desk</title>" in response.read(4096)
+    except OSError:
+        return False
+
+
+def _open(url: str) -> None:
+    try:
+        open_on_windows(url)
+    except OSError:
+        pass  # the printed link is enough
+
+
 def dashboard_command(settings: Settings, port: int, open_browser: bool) -> int:
     try:
         dashboard = Dashboard(settings, _account(settings), opener=open_on_windows, remake=_remaker(settings))
         server = DashboardServer(dashboard, port=port)
     except OSError as exc:
+        url = f"http://localhost:{port}/"
+        if _dashboard_running(port):
+            print(f"The dashboard is already running at {url}")
+            if open_browser:
+                _open(url)
+            return 0
         print(f"Could not start the dashboard on port {port} ({exc}). Is it already open? "
               f"Otherwise try another port: --port {port + 1}", file=sys.stderr)
         return 1
     url = f"http://localhost:{port}/"
     print(f"Dashboard running at {url}\nLeave this window open; press Ctrl+C to stop it.")
     if open_browser:
-        try:
-            open_on_windows(url)
-        except OSError:
-            pass  # the printed link is enough
+        _open(url)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
