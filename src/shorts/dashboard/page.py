@@ -42,7 +42,7 @@ header .wrap { display:flex; flex-wrap:wrap; align-items:center; gap:10px 28px; 
 .mark { width:40px; height:40px; border-radius:50%; background:#f4511e; color:#fff; display:grid;
   place-items:center; font:700 17px/1 var(--hud); letter-spacing:.02em; }
 .brand strong { font:600 22px/1 var(--hud); font-stretch:semi-condensed; display:block; }
-.brand span { color:var(--steel); font-size:13px; }
+.brand small { display:block; color:var(--steel); font-size:13px; margin-top:3px; }
 .stat { font:400 15px/1.2 var(--hud); color:var(--steel); }
 .stat b { font-weight:700; color:var(--ink); font-size:20px; }
 .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--steel); margin-right:6px; }
@@ -319,7 +319,7 @@ def _header(view: DashboardView) -> str:
     channel = (f'<span class="stat"><span class="dot on"></span>YouTube: {escape(view.channel.title)}</span>'
                if view.channel else '<span class="stat"><span class="dot"></span>YouTube not connected</span>')
     return (f'<header><div class="wrap"><a class="brand" href="/"><span class="mark">LD</span>'
-            f"<span><strong>{CHANNEL_NAME}</strong><span>Review desk</span></span></a>"
+            f"<span><strong>{CHANNEL_NAME}</strong><small>Review desk</small></span></a>"
             f'<span class="stat">Made today <b>{view.made_today} of {view.daily_limit}</b></span>{channel}'
             "</div></header>")
 
