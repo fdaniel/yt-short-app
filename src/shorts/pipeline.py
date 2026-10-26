@@ -18,7 +18,9 @@ from shorts.config import Settings
 from shorts.llm.base import LLMProvider
 from shorts.media.cards import render_fact_card, render_hook_card, render_still
 from shorts.media.ffmpeg import FFmpegError
+from shorts.media import brand
 from shorts.media.render import render_video
+from shorts.media.sting import write_sting
 from shorts.media.shots import Shot, detect_shots
 from shorts.media.timeline import Card, plan_timeline, usable_trailer_shots
 from shorts.metadata import build_metadata, content_hash, write_metadata
@@ -172,16 +174,19 @@ def _render(job: _Job, draft: ScriptDraft, article: Article, *, take: str = "") 
     s = job.settings
     job.work.mkdir(parents=True, exist_ok=True)
     narration = _narrate(draft, job)
-    visuals = _gather_visuals(draft, article, job, narration.duration)
+    total = narration.duration + brand.OUTRO_S
+    visuals = _gather_visuals(draft, article, job, total)
     assets = visuals.assets
     items = plan_timeline(
-        narration.duration, trailer=visuals.trailer, stock=visuals.stock, stills=visuals.stills,
+        total, trailer=visuals.trailer, stock=visuals.stock, stills=visuals.stills,
         cards=_card_pairs(assets),
         slot_s=s.video.slot_s, max_shot_s=s.video.max_shot_s, max_trailer_share=s.video.max_trailer_share,
     )
-    ass = write_ass(chunk_captions(narration), _credit(assets, article), job.work / "captions.ass")
+    looks = brand.intro(narration.duration) + brand.outro(narration.duration)
+    ass = write_ass(chunk_captions(narration), _credit(assets, article), job.work / "captions.ass", brand=looks)
+    sting = write_sting(narration.duration, total, job.work / "sting.wav")
     music = next((a.local_path for a in assets if a.kind == AssetKind.MUSIC), None)
-    rendered = render_video(items, narration, ass, music, job.work / "video.mp4", s)
+    rendered = render_video(items, narration, ass, music, job.work / "video.mp4", s, sting=sting, duration=total)
 
     meta = build_metadata(draft, article, assets, footer=s.youtube.description_footer, take=take)
     digest = content_hash(rendered, meta)

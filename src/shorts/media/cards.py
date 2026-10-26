@@ -8,12 +8,14 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+from shorts.media.brand import ORANGE_RGB
 from shorts.script.schema import CardFact
 
 CANVAS = (1080, 1920)
-SAFE_BOX = (80, 250, 900, 1080)  # left, top, right, bottom: clear of the Shorts UI and the captions
+# left, top, right, bottom: under the LD badge and the footage credit, above the captions, clear of the Shorts UI
+SAFE_BOX = (80, 320, 900, 1080)
 BACKGROUND = (11, 15, 20)
-ACCENT = (61, 220, 151)
+ACCENT = ORANGE_RGB
 TEXT = (245, 247, 250)
 MUTED = (150, 160, 175)
 PANEL = (*BACKGROUND, 150)  # about 60% dark: text stays readable, footage shows through

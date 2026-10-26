@@ -16,6 +16,10 @@ _COVER = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920"
 _FPS = 30
 _STILL_ZOOM = 0.08  # a still zooms in this much over its slot, so nothing on screen is frozen
 _PAN = (0.35, 0.65)  # a wide still pans across this part of its overflow during its slot
+BRAND_FONTS = Path(__file__).parents[3] / "assets" / "fonts"
+# every shot opens slightly zoomed in and settles in 7 frames: a soft push that smooths each cut
+_PUNCH = (",zoompan=z='1+0.035*pow(max(0\\,1-on/7)\\,2)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2'"
+          f":d=1:s=1080x1920:fps={_FPS},setsar=1")
 
 
 class RenderError(Exception):
@@ -54,6 +58,7 @@ def _render_segment(item: TimelineItem, out: Path, timeout_s: int) -> None:
     else:
         inputs = ["-loop", "1", "-framerate", str(_FPS), "-t", length, "-i", str(item.image)]
         background = _still_filter(item.image, item.duration)
+    background += _PUNCH
     graph = f"[0:v]{background}[v]"
     if item.overlay is not None:
         inputs += ["-loop", "1", "-framerate", str(_FPS), "-t", length, "-i", str(item.overlay)]
@@ -74,20 +79,26 @@ def _concat(items: list[TimelineItem], segments: Path, timeout_s: int) -> Path:
     return visual
 
 
-def _final_args(visual: Path, narration: Narration, ass_path: Path, music: Path | None, settings: Settings) -> list[str]:
-    duration = narration.duration
-    subtitles = f"[0:v]subtitles={ass_path.name}:fontsdir={settings.font_file.parent}[v]"
+def _final_args(
+    visual: Path, narration: Narration, ass_path: Path, music: Path | None, settings: Settings,
+    sting: Path | None, duration: float,
+) -> list[str]:
+    """Narration (padded with silence to the end), music under it, and the brand sound on top."""
+    subtitles = f"[0:v]subtitles={ass_path.name}:fontsdir={BRAND_FONTS}[v]"
     inputs = ["-i", str(visual), "-i", str(narration.audio_path)]
-    if music is None:
-        graph, audio_map = subtitles, "1:a"
-    else:
+    graph, mix = [subtitles, "[1:a]apad[n]"], ["[n]"]
+    if music is not None:
         inputs += ["-stream_loop", "-1", "-i", str(music)]
         fade_at = max(0.0, duration - 1)
-        graph = (
-            f"{subtitles};[2:a]volume={settings.video.music_volume},afade=t=out:st={fade_at:.2f}:d=1[m];"
-            "[1:a][m]amix=inputs=2:duration=first:normalize=0[a]"
-        )
-        audio_map = "[a]"
+        graph.append(f"[{inputs.count("-i") - 1}:a]volume={settings.video.music_volume},afade=t=out:st={fade_at:.2f}:d=1[m]")
+        mix.append("[m]")
+    if sting is not None:
+        inputs += ["-i", str(sting)]
+        graph.append(f"[{inputs.count("-i") - 1}:a]anull[s]")
+        mix.append("[s]")
+    graph.append(f"{''.join(mix)}amix=inputs={len(mix)}:duration=first:normalize=0[a]")
+    audio_map = "[a]"
+    graph = ";".join(graph)
     return [
         *inputs, "-filter_complex", graph, "-map", "[v]", "-map", audio_map, "-t", f"{duration:.3f}",
         "-c:v", "libx264", "-preset", "medium", "-crf", "23", "-maxrate", "6M", "-bufsize", "12M",
@@ -111,14 +122,15 @@ def _shrink_if_needed(out: Path, settings: Settings) -> None:
 
 
 def render_video(
-    items: list[TimelineItem], narration: Narration, ass_path: Path, music: Path | None, out: Path, settings: Settings
+    items: list[TimelineItem], narration: Narration, ass_path: Path, music: Path | None, out: Path, settings: Settings,
+    *, sting: Path | None = None, duration: float | None = None,
 ) -> Path:
     timeout_s = settings.limits.ffmpeg_timeout_s
     segments = out.parent / "segments"
     segments.mkdir(parents=True, exist_ok=True)
     try:
         visual = _concat(items, segments, timeout_s)
-        args = _final_args(visual, narration, ass_path, music, settings)
+        args = _final_args(visual, narration, ass_path, music, settings, sting, duration or narration.duration)
         # cwd = the captions folder, so the subtitles filter sees a bare filename (no path escaping).
         run_ffmpeg([*args, str(out)], timeout_s=timeout_s, cwd=ass_path.parent)
         _shrink_if_needed(out, settings)

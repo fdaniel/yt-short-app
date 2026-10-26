@@ -45,6 +45,34 @@ def test_render_with_looping_music(scene, settings, tmp_path):
     assert probe_video(out).duration == pytest.approx(10, abs=0.2)
 
 
+def test_the_outro_runs_past_the_narration_with_the_brand_sound(scene, settings, tmp_path):
+    from shorts.media import brand
+    from shorts.media.sting import write_sting
+
+    work, narration, _, _ = scene
+    total = narration.duration + brand.OUTRO_S
+    looks = brand.intro(narration.duration) + brand.outro(narration.duration)
+    ass = write_ass([CaptionChunk("Hello", 0, narration.duration)], "Footage: Test / Steam", work / "b.ass", brand=looks)
+    sting = write_sting(narration.duration, total, work / "sting.wav")
+    gray = lavfi_video(tmp_path, "color=c=gray:size=1920x1080:duration=12", name="gray.mp4")
+    items = [TimelineItem("shot", total, Shot(gray, 1, 0.5, 0.5 + total, 1.0), None)]
+    out = render_video(items, narration, ass, None, work / "video.mp4", settings, sting=sting, duration=total)
+    assert probe_video(out).duration == pytest.approx(total, abs=0.1)
+    from PIL import Image
+
+    end = Image.open(_frame_file(out, total - 0.15, tmp_path / "end.png")).convert("RGB")
+    assert end.getpixel((60, 1500)) == pytest.approx(brand.ORANGE_RGB, abs=12)  # the slash covers the screen
+    assert end.getpixel((540, 760)) == pytest.approx(brand.INK_RGB, abs=12)  # the badge, above its letters
+
+
+def _frame_file(video, seconds, out):
+    import subprocess
+
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", str(seconds), "-i", str(video),
+                    "-frames:v", "1", str(out)], check=True)
+    return out
+
+
 def frame_at(video, seconds, out):
     import subprocess
 
@@ -79,7 +107,7 @@ def test_text_panel_is_drawn_over_the_footage(scene, settings, tmp_path, font_fi
     overlay = render_hook_card("DLSS 5 is here", work / "hook_overlay.png", font_file, overlay=True)
     items = [TimelineItem("shot", 10.0, Shot(white, 1, 0.5, 10.5, 1.0), None, overlay)]
     frame = frame_at(render_video(items, narration, ass, None, work / "video.mp4", settings), 5, tmp_path / "f.png")
-    assert mean(frame, (50, 240, 70, 260)) < 150  # the see-through panel darkens the white footage
+    assert mean(frame, (50, 300, 70, 320)) < 150  # the see-through panel darkens the white footage
     assert mean(frame, (0, 1700, 1080, 1900)) > 200  # footage around it
 
 

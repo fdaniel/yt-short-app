@@ -3,10 +3,13 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+from shorts.media.brand import ORANGE, BrandEvent
 from shorts.text import clean_text
 from shorts.voice.narration import Narration
 
-CAPTION_SIZE = 78
+CAPTION_SIZE = 104
+BRAND_FONT = "Anton"
+_POP = "\\fscx84\\fscy84\\t(0,90,\\fscx100\\fscy100)"  # each new phrase pops in
 CAPTION_MARGIN_V = 520  # bottom edge at y=1400: under card text, above the Shorts title/buttons
 
 _HEADER = """[Script Info]
@@ -18,8 +21,9 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,{font},{size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,6,0,2,120,200,{margin_v},1
-Style: Credit,{font},34,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,3,0,7,60,60,120,1
+Style: Caption,{font},{size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,1,0,1,7,0,2,90,90,{margin_v},1
+Style: Credit,DejaVu Sans,30,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,3,0,7,62,60,240,1
+Style: Brand,{font},60,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,0,0,0,0,100,100,1,0,1,0,0,7,0,0,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -71,13 +75,34 @@ def _ass_time(seconds: float) -> str:
     return f"{hours}:{minutes:02d}:{secs:02d}.{cs:02d}"
 
 
+def _event(style: str, start: float, end: float, text: str, layer: int = 0) -> str:
+    return f"Dialogue: {layer},{_ass_time(start)},{_ass_time(end)},{style},,0,0,0,,{text}"
+
+
 def _dialogue(style: str, start: float, end: float, text: str) -> str:
-    return f"Dialogue: 0,{_ass_time(start)},{_ass_time(end)},{style},,0,0,0,,{sanitize_caption_text(text)}"
+    return _event(style, start, end, sanitize_caption_text(text))
 
 
-def write_ass(chunks: list[CaptionChunk], credit_text: str, out_path: Path, font_name: str = "DejaVu Sans") -> Path:
+def _spoken_word_events(chunk: CaptionChunk) -> list[str]:
+    """The phrase stays on screen; the word being said turns orange (timed by its share of the letters)."""
+    words = sanitize_caption_text(chunk.text).upper().split()
+    total = sum(len(w) for w in words) or 1
+    events, cursor = [], chunk.start
+    for i, word in enumerate(words):
+        end = chunk.end if i == len(words) - 1 else cursor + (chunk.end - chunk.start) * len(word) / total
+        lit = " ".join(f"{{\\1c{ORANGE}}}{w}{{\\1c&H00FFFFFF&}}" if j == i else w for j, w in enumerate(words))
+        events.append(_event("Caption", cursor, end, (f"{{{_POP}}}" if i == 0 else "") + lit))
+        cursor = end
+    return events
+
+
+def write_ass(
+    chunks: list[CaptionChunk], credit_text: str, out_path: Path, font_name: str = BRAND_FONT,
+    brand: list[BrandEvent] | None = None,
+) -> Path:
     end = max((c.end for c in chunks), default=0.0)
     events = [_dialogue("Credit", 0.0, end, credit_text)]
-    events += [_dialogue("Caption", c.start, c.end, c.text) for c in chunks]
+    events += [e for c in chunks for e in _spoken_word_events(c)]
+    events += [_event(b.style, b.start, b.end, b.text, b.layer) for b in brand or []]
     out_path.write_text(_HEADER.format(font=font_name, size=CAPTION_SIZE, margin_v=CAPTION_MARGIN_V) + "\n".join(events) + "\n", encoding="utf-8")
     return out_path

@@ -37,7 +37,7 @@ def test_ass_file(tmp_path):
     )
     txt = p.read_text()
     assert "PlayResX: 1080" in txt and "PlayResY: 1920" in txt
-    assert txt.count("Dialogue:") == 3
+    assert txt.count("Dialogue:") == 4  # the credit, then one per spoken word: "Hi", "there", "x"
     assert "0:00:01.50" in txt and "0:00:03.00" in txt
     assert "{x}" not in txt
     assert "Footage: CD PROJEKT RED / Steam" in txt
@@ -53,3 +53,30 @@ def test_captions_sit_below_card_text(tmp_path):
     txt = write_ass([CaptionChunk("Hi", 0, 1)], "c", tmp_path / "c.ass").read_text()
     assert f",{CAPTION_MARGIN_V},1" in txt.split("Style: Caption")[1].splitlines()[0]
     assert CANVAS[1] - CAPTION_MARGIN_V <= 1450  # stays clear of the Shorts title/buttons overlay
+
+
+def _caption_events(txt: str) -> list[str]:
+    return [line for line in txt.splitlines() if line.startswith("Dialogue:") and ",Caption," in line]
+
+
+def test_the_word_being_said_turns_orange_while_the_phrase_stays(tmp_path):
+    from shorts.media.brand import ORANGE
+
+    txt = write_ass([CaptionChunk("Grab it now", 0, 3)], "c", tmp_path / "c.ass").read_text()
+    events = _caption_events(txt)
+    assert len(events) == 3
+    for lit, event in zip(("GRAB", "IT", "NOW"), events):
+        assert f"{{\\1c{ORANGE}}}{lit}{{" in event
+        assert event.count(ORANGE) == 1
+        assert all(word in event for word in ("GRAB", "IT", "NOW"))
+    assert "0:00:00.00" in events[0] and "0:00:03.00" in events[-1]  # the phrase's whole time, no gaps
+    assert "\\fscx84" in events[0] and "\\fscx84" not in events[1]  # it pops in once, as it appears
+
+
+def test_brand_events_are_written_on_their_own_layers(tmp_path):
+    from shorts.media.brand import BrandEvent
+
+    look = [BrandEvent(25.0, 25.9, "Brand", "{\\an5}LD", layer=9)]
+    txt = write_ass([CaptionChunk("Hi", 0, 1)], "c", tmp_path / "c.ass", brand=look).read_text()
+    assert "Dialogue: 9,0:00:25.00,0:00:25.90,Brand,,0,0,0,,{\\an5}LD" in txt
+    assert "Style: Brand,Anton," in txt
