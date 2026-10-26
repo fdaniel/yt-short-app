@@ -168,6 +168,11 @@ video would stay private for good).
 The connection is stored in `~/tech-shorts-data/youtube/token.json` (readable only by you). Delete that folder's
 `token.json` to disconnect.
 
+## Gameplay recording (gaming PC)
+
+The Loadout Recorder (`recorder/`) records Steam games with OBS on the gaming PC, hands-free, and Syncthing
+copies the recordings here for First look videos. Setup steps: [docs/first-look-recorder.md](docs/first-look-recorder.md).
+
 ## Settings
 
 `config.yaml` controls voice, narration length (`min_words`/`max_words`, tuned to ~2 words per second),
