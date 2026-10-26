@@ -54,7 +54,7 @@ def test_a_game_free_right_now_becomes_a_story_with_its_offer_facts():
     assert it.title == "Sker Ritual is free on the Epic Games Store until October 29"
     assert it.source == EPIC_SOURCE and it.topic == "gaming"
     assert it.url == "https://store.epicgames.com/en-US/p/sker-ritual-aac702"
-    assert it.published == datetime(2026, 10, 22, 15, 0, tzinfo=UTC)
+    assert it.published == NOW  # still free, so still news: not dated from the offer's first day
     assert it.steam_app_id == 1492070
     text = article_from_item(it).text
     for fact in ("until Thursday, October 29 at 15:00 UTC", "$22.39", "Wales Interactive", "Maid of Sker",

@@ -90,14 +90,15 @@ def free_now(client: httpx.Client, *, country: str, now: datetime, max_bytes: in
         # before its reveal, next week's game is listed as "Mystery Game"
         if not (title and offer and slug) or "mystery game" in title.lower():
             continue
-        start, end = offer
+        _, end = offer
         app = _steam_app(client, title, _makers(element), max_bytes)
         if app is None:
             # without the game's own trailer the Short would be a slideshow of stock clips
             log.info("Leaving out free game %s: not found on Steam by the same studio", title)
             continue
+        # dated now, not from the offer's first day: the game is news for as long as it is free
         items.append(FeedItem(
-            source=EPIC_SOURCE, topic="gaming", url=STORE_PAGE.format(slug=slug), published=start,
+            source=EPIC_SOURCE, topic="gaming", url=STORE_PAGE.format(slug=slug), published=now,
             title=f"{title} is free on the Epic Games Store until {end:%B} {end.day}",
             content_html=_story(title, element, end, app), steam_app_id=app.app_id,
         ))
