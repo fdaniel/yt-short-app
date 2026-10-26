@@ -20,6 +20,8 @@ _WORDS = {
     re.compile(r"\bXBOX\b"): "Xbox",
     re.compile(r"\bAAA\b"): "triple-A",
     re.compile(r"\bGTA VI\b"): "GTA six",
+    # capitalised, the engine takes it for the city in Alabama: "mo-BEEL"
+    re.compile(r"\bMobile\b"): "mobile",
 }
 # unit -> (singular, plural); singular before a noun ("a 2 terabyte SSD"), plural otherwise
 _UNITS = {
@@ -39,6 +41,9 @@ _ROMAN = re.compile(r"[IVXLCDM]+")
 _PRICE_BEFORE = re.compile(r"([€£$])(\d{1,3}),(\d{2})(?![\d,])")
 _PRICE_AFTER = re.compile(r"(?<![\d.,])(\d{1,3}),(\d{2})\s?(€)")
 _CURRENCIES = {"€": "euros", "£": "pounds", "$": "dollars"}
+# a price written out ("3.99 pounds"): the engine says "three point nine nine pounds"
+_PRICE_WORD = re.compile(r"(?<![\d.,])(\d{1,4})\.(\d{2}) (euros|pounds|dollars)\b")
+_SYMBOLS = {name: symbol for symbol, name in _CURRENCIES.items()}
 _SOUND = re.compile(r"\b(" + "|".join(_SOUNDS) + r")('s)?\b", re.IGNORECASE)
 _UNIT = re.compile(r"(\d)\s?(" + "|".join(sorted(_UNITS, key=len, reverse=True)) + r")\b(\s+(\w+))?")
 
@@ -71,6 +76,7 @@ def _unit(match: re.Match) -> str:
 def speakable(text: str) -> str:
     text = _PRICE_BEFORE.sub(lambda m: _price(m.group(1), m.group(2), m.group(3)), text)
     text = _PRICE_AFTER.sub(lambda m: _price(m.group(3), m.group(1), m.group(2)), text)
+    text = _PRICE_WORD.sub(lambda m: _price(_SYMBOLS[m.group(3)], m.group(1), m.group(2)), text)
     text = _CAPS_WORD.sub(_caps_word, text)
     text = _SOUND.sub(_sound, text)
     for pattern, spoken in _WORDS.items():
