@@ -30,6 +30,8 @@ log = logging.getLogger(__name__)
 GB = 1024**3
 AI_UNAVAILABLE = "AI unavailable (free quota used up or errors), trying again next run"
 _CHECK_ERRORS = (httpx.HTTPError, ValueError, SourceTextError, SteamError, DownloadTooLarge, UnsafeURLError)
+# The page itself is the problem, so trying again next run would fail the same way.
+_UNREADABLE = (SourceTextError, DownloadTooLarge, UnsafeURLError)
 
 
 class RunLocked(Exception):
@@ -179,6 +181,10 @@ def _make_best(ranked, settings, deps, conn, topics, today, make, considered) ->
         it = scored.item
         try:
             article, mismatch = _article_and_mismatch(it, steam_id, settings, deps)
+        except _UNREADABLE as exc:
+            log.warning("Setting aside %s: %s", it.title, exc)
+            topics.record(it.url, it.source, it.title, it.published, TopicStatus.SKIPPED, scored.score, str(exc))
+            continue
         except _CHECK_ERRORS as exc:
             log.warning("Could not check the game of %s, trying it next run: %s", it.title, exc)
             continue

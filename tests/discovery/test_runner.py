@@ -343,3 +343,26 @@ def test_a_store_game_with_the_same_name_from_another_studio_is_not_used(cfg, co
     assert make.calls == [] and report.made == ()
     reason = conn.execute("SELECT status, explanation FROM topics").fetchone()
     assert reason["status"] == "skipped" and "JanduSoft" in reason["explanation"]
+
+
+@respx.mock
+def test_a_story_whose_page_cannot_be_read_is_set_aside_not_retried_every_run(cfg, conn):
+    mock_feeds(hw=[], games=[])
+    respx.get(GAMES.url).respond(200, text=rss(*GAME_ITEMS, full_text=False))
+    respx.get("https://news.xbox.com/en-us/mw4/").respond(200, text="<html><body><p>Loading...</p></body></html>")
+    make = FakeMake(conn)
+    run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game="Modern Warfare 4")])]), make)
+    assert make.calls == []
+    reason = conn.execute("SELECT status, explanation FROM topics").fetchone()
+    assert reason["status"] == "skipped" and "could not extract enough text" in reason["explanation"]
+
+
+@respx.mock
+def test_a_story_whose_page_times_out_is_tried_again_next_run(cfg, conn):
+    mock_feeds(hw=[], games=[])
+    respx.get(GAMES.url).respond(200, text=rss(*GAME_ITEMS, full_text=False))
+    respx.get("https://news.xbox.com/en-us/mw4/").mock(side_effect=httpx.ReadTimeout("slow"))
+    make = FakeMake(conn)
+    run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game="Modern Warfare 4")])]), make)
+    assert make.calls == []
+    assert conn.execute("SELECT COUNT(*) FROM topics").fetchone()[0] == 0
