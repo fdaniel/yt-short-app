@@ -88,7 +88,8 @@ def _run(settings, deps, conn, now, free_bytes, make) -> RunReport:
     recent = topics.recent_titles(d.history_days, now)
     kept, rejected = cheap_filter(items, seen_urls=topics.seen_urls(), recent_titles=recent, settings=d, now=now)
     for it, reason in rejected:
-        if reason != "already seen":
+        # a story dated ahead (Samsung's feed does this) is news once that time has passed
+        if reason not in ("already seen", "dated in the future"):
             topics.record(it.url, it.source, it.title, it.published, TopicStatus.SKIPPED, None, reason)
     if not kept:
         return RunReport((), "nothing new", len(items))

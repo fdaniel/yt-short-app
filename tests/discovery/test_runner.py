@@ -366,3 +366,14 @@ def test_a_story_whose_page_times_out_is_tried_again_next_run(cfg, conn):
     run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game="Modern Warfare 4")])]), make)
     assert make.calls == []
     assert conn.execute("SELECT COUNT(*) FROM topics").fetchone()[0] == 0
+
+
+@respx.mock
+def test_a_story_dated_a_few_hours_ahead_is_left_for_a_later_run_not_set_aside(cfg, conn):
+    # Samsung's feed dates posts hours ahead; once that time has passed the story is normal news
+    ahead = ("Galaxy launch", "https://blogs.nvidia.com/blog/ahead/", "Sun, 18 Oct 2026 23:00:00 +0000")
+    mock_feeds(hw=[ahead], games=[])
+    make = FakeMake(conn)
+    run(cfg, conn, ScriptedLLM([]), make)
+    assert make.calls == []
+    assert conn.execute("SELECT COUNT(*) FROM topics").fetchone()[0] == 0
