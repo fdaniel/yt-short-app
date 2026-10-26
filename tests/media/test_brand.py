@@ -53,3 +53,8 @@ def test_between_intro_and_outro_only_the_badge_stays_on_screen():
     lingering = [e for e in brand.intro(25.0) if e.end > 2.5]
     assert len(lingering) == 2 and all("\\move" not in e.text and "\\t(" in e.text for e in lingering)
     assert all(e.start >= 25.0 for e in brand.outro(25.0))
+
+
+def test_the_name_has_a_dark_outline_so_it_reads_on_white_photos():
+    [name] = [e for e in brand.intro(25.0) if e.text.endswith("LOADOUT DAILY")]
+    assert "\\bord4" in name.text  # the Brand style's outline colour is black

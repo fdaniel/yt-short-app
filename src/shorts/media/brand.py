@@ -81,7 +81,7 @@ def _wordmark(start: float, end: float) -> BrandEvent:
     hold_ms = round((end - start) * 1000)
     clip = (f"\\clip({left},{y - 40},{left},{y + 40})\\t(120,420,\\clip({left},{y - 40},{right},{y + 40}))"
             f"\\t({hold_ms - 300},{hold_ms},\\clip({left},{y - 40},{left},{y + 40}))")
-    return BrandEvent(start, end, "Brand", f"{{\\an4\\pos({left},{y + 2}){clip}\\fs62\\bord0\\shad3}}LOADOUT DAILY")
+    return BrandEvent(start, end, "Brand", f"{{\\an4\\pos({left},{y + 2}){clip}\\fs62\\bord4\\shad0}}LOADOUT DAILY")
 
 
 def intro(narration_s: float) -> list[BrandEvent]:
