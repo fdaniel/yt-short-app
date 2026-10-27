@@ -38,7 +38,7 @@ def _remaker(settings: Settings) -> Callable[[int, str], None]:
         with lock:
             if "deps" not in loaded:
                 http = build_http_client(settings)
-                loaded["deps"] = PipelineDeps(http=http, llm=build_llm(settings, http), tts=KokoroTTS(settings.voice.speed))
+                loaded["deps"] = PipelineDeps(http=http, llm=build_llm(settings, http), tts=KokoroTTS(settings.voice.speed, settings.voice.speeds))
             conn = connect(settings.data_dir / "shorts.db")
             try:
                 remake_with_take(video_id, take, settings, loaded["deps"], conn)

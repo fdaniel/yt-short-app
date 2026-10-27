@@ -20,7 +20,7 @@ from shorts.media.cards import render_fact_card, render_hook_card, render_still
 from shorts.media.ffmpeg import FFmpegError
 from shorts.media import brand
 from shorts.media.render import render_video
-from shorts.media.sting import write_sting
+from shorts.media.sting import VOICE_LEAD_S, write_sting
 from shorts.media.shots import Shot, detect_shots
 from shorts.media.timeline import Card, plan_timeline, usable_trailer_shots
 from shorts.metadata import build_metadata, content_hash, write_metadata
@@ -52,6 +52,9 @@ _STOCK_ERRORS = (httpx.HTTPError, ValueError, OSError, FFmpegError, DownloadTooL
 DEFAULT_FOOTAGE_QUERIES = ("computer hardware", "gaming setup", "circuit board closeup")
 STOCK_TAIL_S = 0.3
 MIN_SCENE_S = 0.4
+# the question to viewers, read at the voice's natural speed after a breath: at the lively pace it sounded rushed
+CLOSING_SPEED = 1.0
+CLOSING_GAP_S = 0.4
 MIN_PRESS_IMAGES = 4  # fewer official photos and clips than this: licensed stock video fills in
 _MOVING = (AssetKind.STOCK_VIDEO, AssetKind.PRESS_VIDEO)
 
@@ -80,6 +83,7 @@ class _Visuals:
     trailer: list[Shot]  # only shots the timeline can use
     stock: list[Shot]
     stills: list[Path]
+    clips: list[Shot]  # the company's own clips, also first in `stock`
 
 
 @dataclass(frozen=True)
@@ -178,7 +182,7 @@ def _render(job: _Job, draft: ScriptDraft, article: Article, *, take: str = "") 
     visuals = _gather_visuals(draft, article, job, total)
     assets = visuals.assets
     items = plan_timeline(
-        total, trailer=visuals.trailer, stock=visuals.stock, stills=visuals.stills,
+        total, trailer=visuals.trailer, stock=visuals.stock, stills=visuals.stills, clips=visuals.clips,
         cards=_card_pairs(assets),
         slot_s=s.video.slot_s, max_shot_s=s.video.max_shot_s, max_trailer_share=s.video.max_trailer_share,
     )
@@ -204,7 +208,9 @@ def _render(job: _Job, draft: ScriptDraft, article: Article, *, take: str = "") 
 
 def _narrate(draft: ScriptDraft, job: _Job) -> Narration:
     voice = voice_for(job.video_id, job.settings.voice.voices)
-    narration = build_narration(narration_lines(draft), job.deps.tts, job.work / "narration.wav", voice)
+    narration = build_narration(narration_lines(draft), job.deps.tts, job.work / "narration.wav", voice,
+                                lead_s=VOICE_LEAD_S, closing_speed=CLOSING_SPEED, closing_gap_s=CLOSING_GAP_S,
+                                sign_off=job.settings.video.sign_off)
     low, high = job.settings.video.min_narration_s, job.settings.video.max_narration_s
     if not low <= narration.duration <= high:
         raise ValueError(f"narration is {narration.duration:.1f}s, allowed {low:g}–{high:g}s")
@@ -318,12 +324,13 @@ def _gather_visuals(draft: ScriptDraft, article: Article, job: _Job, duration: f
     wants_stock = job.steam_app_id is None and not steam and len(press) < MIN_PRESS_IMAGES
     stock_assets = _log_usable(_stock_assets(draft, job), blocked, job) if wants_stock else []
     # the company's own clips first, so they come before any stock clip
-    stock = _stock_shots([a for a in press if a.kind == AssetKind.PRESS_VIDEO] + stock_assets, video.slot_s)
+    clips = _stock_shots([a for a in press if a.kind == AssetKind.PRESS_VIDEO], video.slot_s)
+    stock = clips + _stock_shots(stock_assets, video.slot_s)
     if not (trailer or stock or stills):
         raise ValueError(_no_footage_reason(job.settings, job.steam_app_id is not None))
     music = pick_music(job.settings.music_dir, random.Random(job.video_id))
     rest = _log_usable(_cards(draft, article, job) + ([music] if music else []), blocked, job)
-    return _Visuals(steam + press + stock_assets + rest, trailer, stock, stills)
+    return _Visuals(steam + press + stock_assets + rest, trailer, stock, stills, clips)
 
 
 def _log_usable(candidates: list[Asset], blocked: set[str], job: _Job) -> list[Asset]:

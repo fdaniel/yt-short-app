@@ -11,6 +11,9 @@ import soundfile as sf
 RATE = 48000
 _NOTES = (659.25, 987.77)  # E5 then B5: a rising fifth
 _CHIME_DELAY_S = 0.2  # the notes land with the outro badge
+_INTRO_WHOOSH_S = 0.45
+# the first word waits for the whoosh to pass: spoken under it, the hook was hard to make out
+VOICE_LEAD_S = 0.4
 
 
 def _whoosh(seconds: float, rng: np.random.Generator) -> np.ndarray:
@@ -49,7 +52,7 @@ def write_sting(narration_s: float, total_s: float, out: Path) -> Path:
     """One track as long as the video: a whoosh at the start, whoosh and chime at the end, silence between."""
     rng = np.random.default_rng(7)  # the same sound every video
     track = np.zeros(int(total_s * RATE) + 1, np.float32)
-    _place(track, _whoosh(0.45, rng), 0.0, 0.55)
+    _place(track, _whoosh(_INTRO_WHOOSH_S, rng), 0.0, 0.55)
     _place(track, _whoosh(0.4, rng), narration_s - 0.12, 0.55)
     _place(track, _chime(), narration_s + _CHIME_DELAY_S, 0.45)
     sf.write(out, np.clip(track, -1.0, 1.0), RATE)

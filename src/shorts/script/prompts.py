@@ -47,7 +47,8 @@ Rules:
 - The hook and every title open with the subject's name, so the viewer knows at once what the Short is
   about (a roundup: "GeForce NOW adds ...", never "Call of Duty ... arrives on GeForce NOW").
 - Write correct English: check grammar and plurals in every sentence.
-- The closing stays on the same subject (what to look forward to, or a short question to viewers about it).
+- The closing stays on the same subject: a clear, direct question to viewers that names it, such as "Will
+  you buy the new Apple iPad mini?" or "Will you play Hyphen on your phone?" (not just "this new tablet").
 - The hook is at most 12 words, names the game or product (for an expansion or update, the main game too,
   e.g. its full name), and leads with the most striking concrete fact in the SOURCE (a new feature, a
   number, a surprise), not just that it is out or announced. No exaggeration.

@@ -65,7 +65,7 @@ def _make_video(args: argparse.Namespace, settings: Settings) -> int:
             deps = PipelineDeps(
                 http=http,
                 llm=build_llm(settings, http),
-                tts=KokoroTTS(settings.voice.speed),
+                tts=KokoroTTS(settings.voice.speed, settings.voice.speeds),
             )
             result = make_video(args.news_url, args.steam_app_id, VideoFormat(args.format), settings, deps, conn)
     except PipelineError as exc:

@@ -95,3 +95,17 @@ def test_bad_voice_names_fail_fast(tmp_path, voices):
     cfg.write_text(f"voice:\n  voices: {voices}\n")
     with pytest.raises(ConfigError, match="voice"):
         load_settings(cfg, {"GEMINI_API_KEY": "k"})
+
+
+def test_a_voice_may_have_its_own_speed(tmp_path):
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text("voice:\n  voices: [af_heart, am_michael]\n  speeds: {am_michael: 1.3}\n")
+    assert load_settings(cfg, {"GEMINI_API_KEY": "k"}).voice.speeds == {"am_michael": 1.3}
+
+
+@pytest.mark.parametrize("speeds", ["{am_michael: 3.0}", "{xx_nobody: 1.1}"])
+def test_bad_voice_speeds_fail_fast(tmp_path, speeds):
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text(f"voice:\n  speeds: {speeds}\n")
+    with pytest.raises(ConfigError, match="voice"):
+        load_settings(cfg, {"GEMINI_API_KEY": "k"})

@@ -25,10 +25,16 @@ class LLMSettings(_Frozen):
     fallback_model: str = "llama-3.3-70b-versatile"
 
 
+def _check_voice_name(voice: str) -> None:
+    if not re.fullmatch(r"[ab][fm]_[a-z]+", voice):
+        raise ValueError(f"{voice!r} is not a Kokoro English voice name like af_heart or am_michael")
+
+
 class VoiceSettings(_Frozen):
     # Kokoro voices, taken in turn video by video: a (American) or b (British) English, f/m female/male
     voices: tuple[str, ...] = ("af_heart", "am_michael")
     speed: float = 1.0
+    speeds: dict[str, float] = {}  # a voice's own speed, instead of `speed`
 
     @model_validator(mode="before")
     @classmethod
@@ -44,13 +50,22 @@ class VoiceSettings(_Frozen):
         if not voices:
             raise ValueError("list at least one voice")
         for voice in voices:
-            if not re.fullmatch(r"[ab][fm]_[a-z]+", voice):
-                raise ValueError(f"{voice!r} is not a Kokoro English voice name like af_heart or am_michael")
+            _check_voice_name(voice)
         return voices
+
+    @field_validator("speeds")
+    @classmethod
+    def _sensible_speeds(cls, speeds: dict[str, float]) -> dict[str, float]:
+        for voice, speed in speeds.items():
+            _check_voice_name(voice)
+            if not 0.5 <= speed <= 2.0:
+                raise ValueError(f"speed {speed} for {voice} is outside 0.5-2.0")
+        return speeds
 
 
 class VideoSettings(_Frozen):
     min_narration_s: float = 25
+    sign_off: str = ""  # said after the closing question in every video, e.g. "Tell us in the comments!"
     max_narration_s: float = 48
     min_words: int = 60
     max_words: int = 80

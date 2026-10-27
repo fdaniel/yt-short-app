@@ -18,9 +18,9 @@ CARDS = [card("hook"), card("facts", overlay=False), card("fact0"), card("fact1"
 KW = dict(slot_s=3.5, max_shot_s=4.0, max_trailer_share=0.49)
 
 
-def plan(duration, trailer=(), stock=(), stills=(), cards=CARDS):
+def plan(duration, trailer=(), stock=(), stills=(), cards=CARDS, clips=()):
     return plan_timeline(duration, trailer=list(trailer), stock=list(stock), stills=list(stills), cards=list(cards),
-                         **KW)
+                         clips=list(clips), **KW)
 
 
 def test_total_duration_exact():
@@ -164,3 +164,20 @@ def test_trailer_pieces_come_from_different_moments_of_the_trailer():
     starts = sorted(i.shot.start for i in items if i.kind == "shot")
     slot = items[0].duration
     assert all(b - a >= 2 * slot - 1e-6 for a, b in zip(starts, starts[1:]))
+
+
+def test_official_clips_take_turns_with_the_photos_within_the_footage_limit():
+    # the iPad mini story: 12 press photos left Apple's own clips unused, a slideshow
+    stills = [Path(f"{n}.jpg") for n in "abcdefghijkl"]
+    items = plan(30.0, stills=stills, clips=[shot(i, name="c") for i in range(6)])
+    clips = [i for i in items if i.kind == "shot"]
+    assert items[0].kind == "shot" and items[1].kind == "image"  # moving footage opens the video
+    assert sum(i.duration for i in clips) < 0.5 * 30.0
+    assert len({(i.shot.source, i.shot.start) for i in clips}) == len(clips)  # none shown twice
+
+
+def test_clips_share_the_footage_limit_with_the_trailer():
+    items = plan(40.0, trailer=[shot(i) for i in range(20)], stills=[Path("a.jpg")],
+                 clips=[shot(i, name="c") for i in range(20)])
+    moving = sum(i.duration for i in items if i.kind == "shot")
+    assert moving < 0.5 * 40.0

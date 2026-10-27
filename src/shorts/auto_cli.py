@@ -71,7 +71,7 @@ def _run_and_report(settings: Settings) -> int:
     conn = connect(settings.data_dir / "shorts.db")
     try:
         with build_http_client(settings) as http:
-            tts = KokoroTTS(settings.voice.speed)
+            tts = KokoroTTS(settings.voice.speed, settings.voice.speeds)
             deps = PipelineDeps(http=http, llm=build_llm(settings, http), tts=tts)
             report = run_once(settings, deps, conn, now=datetime.now(UTC))
     except RunLocked:

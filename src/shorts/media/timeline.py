@@ -1,5 +1,6 @@
 """Lay out visuals over the narration while enforcing the trailer limits (pure, no I/O)."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from math import ceil
 from pathlib import Path
@@ -114,24 +115,30 @@ def plan_timeline(
     slot_s: float,
     max_shot_s: float,
     max_trailer_share: float,
+    clips: Sequence[Shot] = (),
 ) -> list[TimelineItem]:
     """Equal slots, each with a background; video backgrounds sometimes get a text panel over them.
 
-    Backgrounds: a fresh trailer shot on even slots while the trailer budget allows, else a screenshot
-    of the story's own game, else stock footage (licensed, so it may repeat), else a card full screen.
+    Backgrounds: a fresh trailer shot on even slots while the moving-footage budget allows, or else, between
+    photos, a fresh piece of the company's own clips; else a screenshot or photo, else stock footage
+    (licensed, so it may repeat), else a card full screen. `clips` are the official clips, also in `stock`.
     """
     count = ceil(duration / slot_s)
     slot = duration / count
     budget = max_trailer_share * duration
     unused = usable_trailer_shots(trailer, duration, slot_s=slot_s, max_shot_s=max_shot_s)
     stock = _fitting(stock, slot)
-    used = 0.0
+    fresh_clips = _fitting(list(clips), slot)
+    used = 0.0  # seconds of trailer and official clips: together under the share
     shown = 0  # full-screen cards shown so far
     stills_shown = stock_shown = 0  # each in turn: all of them before any repeats
     items: list[TimelineItem] = []
     for i in range(count):
-        if i % 2 == 0 and unused and used + slot <= budget:
-            chosen = unused.pop(0)
+        moving_turn = i % 2 == 0 and used + slot <= budget
+        # with photos to show, the clips take turns with them: photos alone made the iPad mini a slideshow
+        source = unused if unused else fresh_clips if stills else []
+        if moving_turn and source:
+            chosen = source.pop(0)
             used += slot
             background = TimelineItem("shot", slot, replace(chosen, end=chosen.start + slot), None)
         elif stills:
