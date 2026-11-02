@@ -73,3 +73,28 @@ def test_the_voice_engine_says_a_capitals_studio_name_as_a_word():
 
     g2p = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M", model=False).g2p
     assert g2p(speakable("LANCARSE and CAPCOM"))[0] == g2p("Lancarse and Capcom")[0]
+
+
+@pytest.mark.parametrize(("text", "spoken"), [
+    # the owner, 2026-10-31: "before November 5 at 16:00 UTC" was read "sixteen zero zero"
+    ("before November 5 at 16:00 UTC.", "before November 5 at 4 PM UTC."),
+    ("from 09:30 CET", "from 9 30 AM CET"),
+    ("at 12:00 and 00:00", "at 12 noon and midnight"),
+    ("at 18:05", "at 6 oh 5 PM"),
+    ("at 4:30 PM", "at 4 30 PM"),
+    ("at 10:15 am", "at 10 15 am"),
+])
+def test_clock_times_are_said_the_way_people_say_them(text, spoken):
+    assert speakable(text) == spoken
+
+
+@pytest.mark.parametrize("text", ["a 16:9 screen", "scored 3:1", "version 1.16:00"])
+def test_ratios_and_scores_are_not_clock_times(text):
+    assert speakable(text) == text
+
+
+def test_the_voice_engine_says_a_clock_time_without_zeros():
+    from kokoro import KPipeline
+
+    phonemes, _ = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M", model=False).g2p(speakable("at 16:00 UTC"))
+    assert "zˈiəɹO" not in phonemes and "pˌiˈɛm" in phonemes

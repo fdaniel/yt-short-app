@@ -46,6 +46,8 @@ _PRICE_WORD = re.compile(r"(?<![\d.,])(\d{1,4})\.(\d{2}) (euros|pounds|dollars)\
 _SYMBOLS = {name: symbol for symbol, name in _CURRENCIES.items()}
 _SOUND = re.compile(r"\b(" + "|".join(_SOUNDS) + r")('s)?\b", re.IGNORECASE)
 _UNIT = re.compile(r"(\d)\s?(" + "|".join(sorted(_UNITS, key=len, reverse=True)) + r")\b(\s+(\w+))?")
+# a clock time ("16:00 UTC"): the engine says "sixteen zero zero"; a ratio or score (16:9, 3:1) has no two-digit minutes
+_CLOCK = re.compile(r"(?<![\d.:])([01]?\d|2[0-3]):([0-5]\d)(?![\d:])(\s?[AaPp]\.?[Mm]\.?)?")
 
 
 def _sound(match: re.Match) -> str:
@@ -73,7 +75,19 @@ def _unit(match: re.Match) -> str:
     return f"{digit} {singular if before_noun else plural}{after}"
 
 
+def _clock(match: re.Match) -> str:
+    """Said the way people say a time: "4 PM", "6 oh 5 PM", "9 30 AM"."""
+    hour, minutes, period = int(match.group(1)), match.group(2), match.group(3)
+    spoken_minutes = "" if minutes == "00" else f" oh {minutes[1]}" if minutes[0] == "0" else f" {minutes}"
+    if period:  # already "4:30 PM": only the colon goes
+        return f"{hour}{spoken_minutes}{period}"
+    if minutes == "00" and hour in (0, 12):
+        return "midnight" if hour == 0 else "12 noon"
+    return f"{hour % 12 or 12}{spoken_minutes} {'AM' if hour < 12 else 'PM'}"
+
+
 def speakable(text: str) -> str:
+    text = _CLOCK.sub(_clock, text)
     text = _PRICE_BEFORE.sub(lambda m: _price(m.group(1), m.group(2), m.group(3)), text)
     text = _PRICE_AFTER.sub(lambda m: _price(m.group(3), m.group(1), m.group(2)), text)
     text = _PRICE_WORD.sub(lambda m: _price(_SYMBOLS[m.group(3)], m.group(1), m.group(2)), text)
