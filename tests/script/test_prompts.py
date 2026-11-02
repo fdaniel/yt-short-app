@@ -83,3 +83,37 @@ def test_hook_leads_with_the_most_striking_fact_not_availability():
 def test_script_prompt_asks_for_take_suggestions_without_new_facts():
     prompt = build_script_prompt(article(), VideoFormat.NEWS_FLASH, [], VideoSettings())
     assert "take_options" in prompt and "no numbers" in prompt
+
+
+def test_closing_fits_the_story_instead_of_one_question_shape():
+    # the owner, 2026-10-31: every video ended "Will you play ...?"; a free game should end
+    # "Claim this free game before the deal expires!"
+    p = build_script_prompt(article(), VideoFormat.NEWS_FLASH, [], VideoSettings())
+    assert "Will you buy the new Apple iPad mini?" not in p and "Will you play Hyphen" not in p
+    assert "free" in p and "claim it before" in p
+    assert "either/or" in p
+
+
+def test_recent_closings_are_listed_so_the_new_one_starts_differently():
+    p = build_script_prompt(article(), VideoFormat.NEWS_FLASH, [], VideoSettings(),
+                            recent_closings=["Will you play Orcthal on PC?", "Will you buy the Razer Mako X?"])
+    assert "Will you play Orcthal on PC?" in p and "Will you buy the Razer Mako X?" in p
+    assert "start differently" in p
+    assert p.index("Will you play Orcthal") < p.rindex("\nSOURCE (")
+
+
+def test_without_recent_closings_there_is_no_empty_list():
+    assert "start differently" not in build_script_prompt(article(), VideoFormat.NEWS_FLASH, [], VideoSettings())
+
+
+def test_the_closing_style_takes_turns_from_video_to_video():
+    # told only "vary it", the model swapped every "Will you ...?" for "Are you ...?"
+    from shorts.script.prompts import CLOSING_STYLES
+
+    prompts = [build_script_prompt(article(), VideoFormat.NEWS_FLASH, [], VideoSettings(), closing_turn=t)
+               for t in range(len(CLOSING_STYLES))]
+    for style, p in zip(CLOSING_STYLES, prompts, strict=True):
+        assert style in p
+    assert len(set(prompts)) == len(CLOSING_STYLES)
+    assert prompts[0] == build_script_prompt(article(), VideoFormat.NEWS_FLASH, [], VideoSettings(),
+                                             closing_turn=len(CLOSING_STYLES))

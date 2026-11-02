@@ -55,6 +55,7 @@ MIN_SCENE_S = 0.4
 # the question to viewers, read at the voice's natural speed after a breath: at the lively pace it sounded rushed
 CLOSING_SPEED = 1.0
 CLOSING_GAP_S = 0.4
+RECENT_CLOSINGS = 8  # shown to the script writer so each closing starts differently from the last ones
 MIN_PRESS_IMAGES = 4  # fewer official photos and clips than this: licensed stock video fills in
 _MOVING = (AssetKind.STOCK_VIDEO, AssetKind.PRESS_VIDEO)
 
@@ -132,7 +133,8 @@ def _produce(job: _Job) -> VideoResult:
     videos = VideoRepository(job.conn)
     s = job.settings
     article = job.article or fetch_article(job.deps.http, job.news_url, max_bytes=s.limits.max_html_bytes)
-    draft = write_checked_script(article, job.fmt, job.deps.llm, s.video)
+    draft = write_checked_script(article, job.fmt, job.deps.llm, s.video, videos.recent_closings(RECENT_CLOSINGS),
+                                 closing_turn=job.video_id)
     videos.save_script(job.video_id, draft.model_dump_json(), draft.title_options[0])
     videos.set_status(job.video_id, VideoStatus.FACT_CHECKED)
 

@@ -1,6 +1,7 @@
 import pytest
 
 from shorts.models import VideoFormat
+from shorts.script.prompts import CLOSING_STYLES
 from shorts.script.schema import Claim, ClaimVerdict, FactCheckResult
 from shorts.script.writer import ScriptRejected, write_checked_script
 from tests.fakes import ScriptedLLM
@@ -69,3 +70,11 @@ def test_only_wrong_length_gets_two_more_tries_and_a_clean_message():
     with pytest.raises(ScriptRejected) as e:
         write_checked_script(article(), VideoFormat.NEWS_FLASH, llm, SMALL)
     assert llm.calls == 4 and "too long" in str(e.value) and "previous narration" not in str(e.value)
+
+
+def test_recent_closings_and_closing_style_reach_every_attempt():
+    llm = ScriptedLLM([BAD_QUOTE, GOOD, OK])
+    write_checked_script(article(), VideoFormat.NEWS_FLASH, llm, SMALL, recent_closings=["Will you play X?"],
+                         closing_turn=1)
+    assert "Will you play X?" in llm.prompts[0] and "Will you play X?" in llm.prompts[1]
+    assert CLOSING_STYLES[1] in llm.prompts[0] and CLOSING_STYLES[1] in llm.prompts[1]

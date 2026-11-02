@@ -1,5 +1,7 @@
 """Write a script and keep it only if every claim is grounded in the source."""
 
+from collections.abc import Sequence
+
 from shorts.config import VideoSettings
 from shorts.llm.base import LLMProvider
 from shorts.models import VideoFormat
@@ -53,12 +55,14 @@ def _verdict_problems(draft: ScriptDraft, result: FactCheckResult) -> list[str]:
 
 
 def write_checked_script(
-    article: Article, fmt: VideoFormat, llm: LLMProvider, video: VideoSettings
+    article: Article, fmt: VideoFormat, llm: LLMProvider, video: VideoSettings,
+    recent_closings: Sequence[str] = (), closing_turn: int = 0,
 ) -> ScriptDraft:
     feedback: list[str] = []
     rewrites = length_rewrites = 0
     while True:
-        draft = llm.generate_json(build_script_prompt(article, fmt, feedback, video), ScriptDraft)
+        prompt = build_script_prompt(article, fmt, feedback, video, recent_closings, closing_turn)
+        draft = llm.generate_json(prompt, ScriptDraft)
         problems = _cheap_problems(draft, article, video)
         if not problems:  # only spend an LLM call on the fact check when cheap checks pass
             result = llm.generate_json(build_factcheck_prompt(draft, article), FactCheckResult)

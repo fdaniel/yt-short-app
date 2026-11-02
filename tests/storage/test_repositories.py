@@ -150,3 +150,15 @@ def test_used_source_urls_only_counts_videos_that_may_go_public(conn, make_asset
         repo.set_status(kept, status)
     repo.set_status(failed, VideoStatus.FAILED, "boom")
     assert assets.used_source_urls(AssetKind.STOCK_VIDEO) == {"https://pixabay.com/videos/id-1/"}
+
+
+def test_recent_closings_newest_first_skipping_videos_without_a_script(conn):
+    repo = VideoRepository(conn)
+    for closing in ("First?", None, "Third!"):
+        vid = repo.create("https://nvidia.com/x", None, VideoFormat.NEWS_FLASH)
+        if closing:
+            repo.save_script(vid, f'{{"closing": "{closing}", "hook": "h"}}', "t")
+    broken = repo.create("https://nvidia.com/y", None, VideoFormat.NEWS_FLASH)
+    repo.save_script(broken, "not json", "t")
+    assert repo.recent_closings(5) == ["Third!", "First?"]
+    assert repo.recent_closings(1) == ["Third!"]

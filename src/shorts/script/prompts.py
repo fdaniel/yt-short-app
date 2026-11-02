@@ -1,5 +1,7 @@
 """Prompt text for script writing and fact checking."""
 
+from collections.abc import Sequence
+
 from shorts.config import VideoSettings
 from shorts.models import VideoFormat
 from shorts.script.schema import ScriptDraft
@@ -16,6 +18,14 @@ FORMAT_GUIDES: dict[VideoFormat, str] = {
 BODY_SENTENCES = 4
 HOOK_WORDS = 10  # typical: at most 12
 CLOSING_WORDS = 6
+# taken in turn, video by video: told only "vary it", a model swapped every "Will you ...?" for "Are you ...?"
+CLOSING_STYLES = (
+    'a "Would YOU ..." question to viewers (buy it, play it, try it) that names it',
+    "ask viewers if it is on their wishlist, naming it",
+    "ask who is jumping into it and when (tonight, this weekend, at launch), naming it",
+    "ask viewers what they would try first in it, naming it",
+    "tell viewers in a few words where they can get it or try it, naming it",
+)
 
 
 def sentence_plan(video: VideoSettings) -> str:
@@ -27,8 +37,18 @@ def sentence_plan(video: VideoSettings) -> str:
             f"words each, and a closing of {CLOSING_WORDS - 1} to {CLOSING_WORDS + 2} words")
 
 
+def _recent_closings_rule(recent_closings: Sequence[str]) -> str:
+    """Shown the channel's last closings, a model stops ending every Short "Will you play ...?"."""
+    if not recent_closings:
+        return ""
+    listed = "\n".join(f"- {c}" for c in recent_closings)
+    return ("\nThe channel's most recent closings are below. Make yours start differently from every one of "
+            f"them (not with the same first two words):\n{listed}\n")
+
+
 def build_script_prompt(
-    article: Article, fmt: VideoFormat, feedback: list[str], video: VideoSettings
+    article: Article, fmt: VideoFormat, feedback: list[str], video: VideoSettings,
+    recent_closings: Sequence[str] = (), closing_turn: int = 0,
 ) -> str:
     rules = f"""You write narration for a YouTube Short about tech and gaming news.
 
@@ -47,8 +67,11 @@ Rules:
 - The hook and every title open with the subject's name, so the viewer knows at once what the Short is
   about (a roundup: "GeForce NOW adds ...", never "Call of Duty ... arrives on GeForce NOW").
 - Write correct English: check grammar and plurals in every sentence.
-- The closing stays on the same subject: a clear, direct question to viewers that names it, such as "Will
-  you buy the new Apple iPad mini?" or "Will you play Hyphen on your phone?" (not just "this new tablet").
+- The closing stays on the same subject, names it (not just "this new tablet") and fits the story:
+  - free to keep, or a deal with an end date: tell viewers to claim it before it ends.
+  - an event, festival or update with a date: tell viewers when to jump in.
+  - anything else: {CLOSING_STYLES[closing_turn % len(CLOSING_STYLES)]}.
+  Never an either/or "pick a side" question.
 - The hook is at most 12 words, names the game or product (for an expansion or update, the main game too,
   e.g. its full name), and leads with the most striking concrete fact in the SOURCE (a new feature, a
   number, a surprise), not just that it is out or announced. No exaggeration.
@@ -81,7 +104,7 @@ Rules:
         fixes = "\nYour previous attempt had these problems. Fix all of them:\n" + "\n".join(
             f"- {problem}" for problem in feedback
         )
-    return f"{rules}{fixes}\n\nSOURCE ({article.url}):\n{article.text}\n"
+    return f"{rules}{_recent_closings_rule(recent_closings)}{fixes}\n\nSOURCE ({article.url}):\n{article.text}\n"
 
 
 def build_factcheck_prompt(draft: ScriptDraft, article: Article) -> str:

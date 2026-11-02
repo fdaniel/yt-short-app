@@ -1,5 +1,6 @@
 """Data access for videos, assets and the publisher blocklist."""
 
+import json
 import sqlite3
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -96,6 +97,21 @@ class VideoRepository:
     def list_recent(self, limit: int) -> list[VideoRecord]:
         rows = self._conn.execute("SELECT * FROM videos ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
         return [_record(row) for row in rows]
+
+    def recent_closings(self, limit: int) -> list[str]:
+        """The closing lines of the latest scripts, newest first."""
+        closings: list[str] = []
+        rows = self._conn.execute("SELECT script_json FROM videos WHERE script_json IS NOT NULL ORDER BY id DESC")
+        for (script_json,) in rows:
+            try:
+                closing = json.loads(script_json).get("closing")
+            except (ValueError, AttributeError):
+                continue
+            if isinstance(closing, str) and closing.strip():
+                closings.append(closing.strip())
+            if len(closings) >= limit:
+                break
+        return closings
 
     def claim_upload(self, video_id: int) -> bool:
         """Atomically move a video from review to uploading; False if anyone (any process) got there first."""
