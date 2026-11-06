@@ -23,7 +23,9 @@ from shorts.models import TopicStatus
 from shorts.net import DownloadTooLarge, UnsafeURLError
 from shorts.pipeline import PipelineDeps, PipelineError, VideoResult, make_video
 from shorts.sources.article import Article, SourceTextError, fetch_article
-from shorts.sources.steam import SteamError, fetch_steam_app, find_steam_app_id, maker_named, normalise_title
+from shorts.sources.steam import (
+    SteamError, fetch_player_count, fetch_steam_app, find_steam_app_id, maker_named, normalise_title,
+)
 from shorts.storage.topics import TopicRepository
 
 log = logging.getLogger(__name__)
@@ -169,6 +171,28 @@ def _article_and_mismatch(it: FeedItem, steam_id: int | None, settings: Settings
     return article, f"Steam's {app.name!r} is by {makers}, whom the story never names: another game with that name"
 
 
+@dataclass(frozen=True)
+class _TooSmall:
+    reason: str
+    for_good: bool  # False: close to the bar, so the next run looks at the story again
+
+
+def _too_small(it: FeedItem, steam_id: int | None, settings: Settings, deps: PipelineDeps) -> _TooSmall | None:
+    """Why the story's game is too small for a video; None if it is big enough or the story has no game."""
+    wanted = settings.discovery.min_steam_players
+    if steam_id is None or not wanted:
+        return None
+    playing = fetch_player_count(deps.http, steam_id, max_bytes=settings.limits.max_html_bytes)
+    if playing is None:
+        # not out yet: big only when the story came from Steam's own lists of its most popular games
+        return None if it.steam_app_id is not None else _TooSmall("small game: not out yet on Steam", True)
+    if playing >= wanted:
+        return None
+    # player counts rise and fall through the day: only far below the bar is the story set aside
+    return _TooSmall(f"small game: {playing:,} playing on Steam right now, under {wanted:,}",
+                     playing < wanted / 2)
+
+
 def _make_best(ranked, settings, deps, conn, topics, today, make, considered) -> RunReport:
     d = settings.discovery
     made: list[VideoResult] = []
@@ -181,13 +205,20 @@ def _make_best(ranked, settings, deps, conn, topics, today, make, considered) ->
         pending.remove(pick)
         it = scored.item
         try:
-            article, mismatch = _article_and_mismatch(it, steam_id, settings, deps)
+            small = _too_small(it, steam_id, settings, deps)
+            article, mismatch = (None, None) if small else _article_and_mismatch(it, steam_id, settings, deps)
         except _UNREADABLE as exc:
             log.warning("Setting aside %s: %s", it.title, exc)
             topics.record(it.url, it.source, it.title, it.published, TopicStatus.SKIPPED, scored.score, str(exc))
             continue
         except _CHECK_ERRORS as exc:
             log.warning("Could not check the game of %s, trying it next run: %s", it.title, exc)
+            continue
+        if small:
+            log.info("Skipping %s: %s", it.title, small.reason)
+            if small.for_good:
+                topics.record(it.url, it.source, it.title, it.published, TopicStatus.SKIPPED, scored.score,
+                              small.reason)
             continue
         if mismatch:
             log.warning("Wrong footage avoided for %s: %s", it.title, mismatch)

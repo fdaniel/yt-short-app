@@ -11,10 +11,13 @@ from shorts.models import AssetKind, RightsBasis
 from shorts.sources import steam
 from shorts.sources.steam import (
     MAX_TRAILERS,
+    PLAYERS_URL,
     SteamError,
     collect_steam_assets,
+    fetch_player_count,
     fetch_steam_app,
     parse_appdetails,
+    parse_player_count,
 )
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
@@ -185,3 +188,27 @@ def test_game_not_on_steam_returns_none():
     # e.g. a Nintendo-only game: Steam finds nothing at all
     respx.get(url__startswith=SEARCH).respond(200, json={"total": 0, "items": []})
     assert steam.find_steam_app_id(httpx.Client(), "Pokémon Champions") is None
+
+
+def test_player_count_is_read_from_steams_answer():
+    assert parse_player_count({"response": {"player_count": 227174, "result": 1}}) == 227174
+
+
+def test_a_game_steam_has_no_player_count_for_has_none():
+    # unreleased games: Steam answers result 42 and no count
+    assert parse_player_count({"response": {"result": 42}}) is None
+    assert parse_player_count({}) is None
+
+
+@respx.mock
+def test_player_count_is_fetched_from_the_steam_web_api():
+    respx.get(PLAYERS_URL.format(app_id=1172470)).respond(200, json={"response": {"player_count": 5, "result": 1}})
+    with httpx.Client() as client:
+        assert fetch_player_count(client, 1172470, max_bytes=10_000) == 5
+
+
+@respx.mock
+def test_a_garbled_player_count_answer_is_a_steam_error():
+    respx.get(PLAYERS_URL.format(app_id=1)).respond(200, text="<html>")
+    with httpx.Client() as client, pytest.raises(SteamError):
+        fetch_player_count(client, 1, max_bytes=10_000)

@@ -11,6 +11,8 @@ MAX_QUERY_CHARS = 40
 MAX_GAMES_NAMED = 3
 MAX_GAME_NAME_CHARS = 80
 MAX_TAKE_OPTIONS = 3
+MAX_COVER_LINES = 3
+MAX_COVER_LINE_CHARS = 12  # one big line across a 1080 px cover
 
 
 class _Frozen(BaseModel):
@@ -41,6 +43,8 @@ class ScriptDraft(_Frozen):
     subject: str = ""  # the one game, platform or product the Short is about
     # opinions the owner may pick from for their own closing line; never voiced unless they choose one
     take_options: list[str] = Field(default_factory=list)
+    # 2 or 3 big words for the cover image, e.g. DUAL / REVOLVERS / IN APEX; [] = no cover
+    cover_lines: list[str] = Field(default_factory=list)
 
     @field_validator("footage_queries", mode="before")
     @classmethod
@@ -76,6 +80,17 @@ class ScriptDraft(_Frozen):
             if take and take not in tidy:
                 tidy.append(take)
         return tidy[:MAX_TAKE_OPTIONS]
+
+
+    @field_validator("cover_lines", mode="before")
+    @classmethod
+    def _tidy_cover(cls, lines: object) -> list[str]:
+        """Only for the cover, so lines that would not fit are dropped; a single line is no cover."""
+        if not isinstance(lines, list):
+            return []
+        tidy = [" ".join(line.split()).upper() for line in lines if isinstance(line, str)]
+        kept = [line for line in tidy if 0 < len(line) <= MAX_COVER_LINE_CHARS][:MAX_COVER_LINES]
+        return kept if len(kept) >= 2 else []
 
 
 class ClaimVerdict(_Frozen):

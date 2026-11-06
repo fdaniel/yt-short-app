@@ -64,6 +64,7 @@ class VideoCard:
     take_note: str = ""  # how the last take went
     take_options: tuple[str, ...] = ()  # the AI's suggestions, for the owner to pick from only if they agree
     script_lines: tuple[str, ...] = ()  # what the video says, hook first and closing last
+    has_cover: bool = False  # a cover image was made with the video
 
 
 @dataclass(frozen=True)
@@ -169,6 +170,7 @@ class Dashboard:
             record=record,
             meta=_load_meta(record.metadata_path),
             has_file=self._inside_data_dir(record.output_path) is not None,
+            has_cover=self._cover_of(record.output_path) is not None,
             source=topic["source"] if topic else None,
             score=topic["score"] if topic else None,
             explanation=topic["explanation"] if topic else "",
@@ -230,6 +232,16 @@ class Dashboard:
             return None
         resolved = path.resolve()
         return resolved if resolved.is_relative_to((self._settings.data_dir / "exports").resolve()) else None
+
+    def _cover_of(self, video: Path | None) -> Path | None:
+        return self._inside_data_dir(video.parent / "cover.png") if video else None
+
+    def cover_file(self, video_id: int) -> Path | None:
+        with self._db() as conn:
+            try:
+                return self._cover_of(VideoRepository(conn).get(video_id).output_path)
+            except KeyError:
+                return None
 
     def video_file(self, video_id: int) -> Path | None:
         with self._db() as conn:

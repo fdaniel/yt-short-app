@@ -58,6 +58,8 @@ nav a b { font-weight:700; }
   display:grid; grid-template-columns:260px minmax(0, 1fr); gap:24px; }
 @media (max-width:760px) { .card { grid-template-columns:1fr; } .player { max-width:300px; } }
 .player video, .nofile { width:100%; aspect-ratio:9/16; background:#000; border-radius:4px; display:block; }
+.cover { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:.85rem; }
+.cover img { width:54px; aspect-ratio:9/16; object-fit:cover; border-radius:3px; }
 .nofile { display:grid; place-items:center; background:transparent; border:1px dashed var(--line); color:var(--steel); }
 h2 { font:600 25px/1.15 var(--hud); font-stretch:semi-condensed; margin:0 0 6px; }
 .facts { display:flex; flex-wrap:wrap; gap:4px 16px; color:var(--steel); font-size:13px; margin:0 0 4px; }
@@ -292,6 +294,9 @@ def _card(card: VideoCard, view: DashboardView, token: str) -> str:
     r = card.record
     player = (f'<video controls preload="metadata" src="/videos/{r.id}.mp4"></video>' if card.has_file
               else '<div class="nofile">No video file</div>')
+    if card.has_cover:  # for YouTube Studio's cover option (desktop): the API cannot set a Short's cover
+        player += (f'<a class="cover" href="/videos/{r.id}/cover.png?download=1" title="Download cover">'
+                   f'<img src="/videos/{r.id}/cover.png" alt="Cover" loading="lazy">Download cover</a>')
     facts = [f"<span>#{r.id}</span>", f"<span>Made {_when(r.created_at)}</span>"]
     if card.source:
         facts.append(f"<span>{escape(card.source)}</span>")

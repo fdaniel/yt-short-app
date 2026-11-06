@@ -85,7 +85,11 @@ Rules:
 - For every factual claim, add an entry to "claims" whose source_quote is copied verbatim from the SOURCE.
 - Plain text only: no emoji, no hashtags inside the narration.
 - Do not call anything "viral", promise results, or use clickbait that distorts the facts.
-- Titles: 3 honest options under 100 characters. Hashtags: 3 to 5, relevant only.
+- Titles: 3 options under 70 characters that make a gamer stop scrolling: lead with the most surprising
+  fact, one key word may be in CAPITALS, e.g. "Apex Just Added DUAL Revolvers (and Legend Bans)". Every word
+  must be true and match what the Short shows. Hashtags: 3 to 5, relevant only.
+- cover_lines: 2 or 3 lines of 1 or 2 words each (at most 12 letters per line) for the cover image, together a
+  punchy summary of the news, e.g. ["DUAL", "REVOLVERS", "IN APEX"]. Must be true too.
 - card_facts: 2 to 6 short label/value pairs (specs, prices, dates, partners) taken from the SOURCE.
 - footage_queries: 2 to 4 stock-video search terms of 2-3 words that show what the story itself is about
   (the kind of product, its use, its setting), generic objects or scenes only: no brand or product names,

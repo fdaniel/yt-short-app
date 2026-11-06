@@ -24,6 +24,8 @@ log = logging.getLogger(__name__)
 MAX_FORM_BYTES = 10_000
 CHUNK = 256 * 1024
 _VIDEO = re.compile(r"/videos/(\d{1,9})\.mp4")
+_COVER = re.compile(r"/videos/(\d{1,9})/cover\.png")
+MAX_COVER_BYTES = 20_000_000
 _ACTION = re.compile(r"/videos/(\d{1,9})/(upload|schedule|mark-uploaded|discard|open-folder|back-to-review|take)")
 _RANGE = re.compile(r"bytes=(\d{0,18})-(\d{0,18})")
 _SECURITY_HEADERS = {
@@ -93,6 +95,10 @@ class _Handler(BaseHTTPRequestHandler):
         if url.path == "/":
             self._page(query.get("tab", ["review"])[0])
             return
+        cover_match = _COVER.fullmatch(url.path)
+        if cover_match:
+            self._cover(int(cover_match.group(1)), download="download" in query)
+            return
         match = _VIDEO.fullmatch(url.path)
         video = self.server.dashboard.video_file(int(match.group(1))) if match else None
         if video is None:
@@ -109,6 +115,14 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(HTTPStatus.INTERNAL_SERVER_ERROR, body.encode(), "text/html; charset=utf-8")
             return
         self._send(HTTPStatus.OK, html.encode(), "text/html; charset=utf-8", {"Cache-Control": "no-store"})
+
+    def _cover(self, video_id: int, download: bool) -> None:
+        cover = self.server.dashboard.cover_file(video_id)
+        if cover is None or cover.stat().st_size > MAX_COVER_BYTES:
+            self._send(HTTPStatus.NOT_FOUND, b"Not found")
+            return
+        name = {"Content-Disposition": f'attachment; filename="cover-{video_id}.png"'} if download else {}
+        self._send(HTTPStatus.OK, cover.read_bytes(), "image/png", name)
 
     def _stream(self, video: Path, download: bool) -> None:
         size = video.stat().st_size

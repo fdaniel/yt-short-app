@@ -180,3 +180,25 @@ def test_take_form_is_routed(settings, make_ready_video):
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+def test_cover_downloads_when_the_video_has_one(client, settings, make_ready_video):
+    from PIL import Image
+
+    vid = make_ready_video()
+    Image.new("RGB", (1080, 1920), "orange").save(settings.data_dir / "exports" / str(vid) / "cover.png")
+    response = client.get(f"/videos/{vid}/cover.png?download=1")
+    assert response.status_code == 200 and response.headers["content-type"] == "image/png"
+    assert "attachment" in response.headers["content-disposition"]
+
+
+def test_no_cover_is_404(client, make_ready_video):
+    assert client.get(f"/videos/{make_ready_video()}/cover.png").status_code == 404
+
+
+def test_review_card_offers_the_cover(client, settings, make_ready_video):
+    from PIL import Image
+
+    vid = make_ready_video()
+    Image.new("RGB", (1080, 1920), "orange").save(settings.data_dir / "exports" / str(vid) / "cover.png")
+    assert f"/videos/{vid}/cover.png?download=1" in client.get("/").text

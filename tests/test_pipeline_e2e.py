@@ -427,3 +427,94 @@ def test_e2e_photos_in_the_feeds_own_text_are_used_without_fetching_the_page(set
     r = make_video(TECH, None, VideoFormat.NEWS_FLASH, settings, deps, conn, article=given)
     kinds = [a.kind for a in AssetRepository(conn).list_for_video(r.video_id)]
     assert kinds.count(AssetKind.PRESS_IMAGE) == len(PHOTOS) and page.call_count == 0
+
+
+def trailer_only(settings):
+    return settings.model_copy(update={"video": settings.video.model_copy(update={"footage": "trailer_only"})})
+
+
+class TextReader:
+    """Stands in for the OCR: finds `text` across the crop edge in every frame, or nothing."""
+
+    def __init__(self, text=None):
+        self.text, self.calls = text, 0
+
+    def __call__(self, frame):
+        from shorts.media.textscan import TextBox
+
+        self.calls += 1
+        width = frame.shape[1]
+        return [TextBox(0.2 * width, 0.5 * width, self.text, 0.9)] if self.text else []
+
+
+@pytest.fixture
+def long_trailer(tmp_path):
+    from tests.helpers import lavfi_video
+
+    return lavfi_video(tmp_path, "testsrc2=size=1920x1080:rate=30:duration=60", name="trailer_long.mp4")
+
+
+@respx.mock
+def test_e2e_trailer_only_game_video_is_all_moving_trailer_footage(settings, conn, long_trailer, screenshot,
+                                                                     monkeypatch):
+    mock_sources()
+    monkeypatch.setattr("shorts.pipeline._require_trailer", lambda job: None)
+    asked = {}
+
+    def steam(*args, **kwargs):
+        asked.update(kwargs)
+        return steam_media(long_trailer, screenshot if kwargs.get("max_screenshots") != 0 else None)()
+
+    monkeypatch.setattr("shorts.pipeline.collect_steam_assets", steam)
+    reader = TextReader()
+    covered = GOOD.model_copy(update={"cover_lines": ["RTX 5090", "IS HERE"]})
+    deps = PipelineDeps(httpx.Client(), ScriptedLLM([covered, ALL_OK]), FakeTTS(rate=0.07), read_text=reader)
+    r = make_video(NEWS, 2, VideoFormat.NEWS_FLASH, trailer_only(settings), deps, conn)
+    assert asked["max_screenshots"] == 0 and reader.calls > 0
+    assert (r.video_path.parent / "cover.png").is_file()
+    kinds = {a.kind for a in AssetRepository(conn).list_for_video(r.video_id)}
+    assert AssetKind.TRAILER in kinds and not kinds & {AssetKind.SCREENSHOT, AssetKind.CARD}
+    assert probe_video(r.video_path).duration > 20
+
+
+@respx.mock
+def test_e2e_trailer_only_refuses_a_trailer_full_of_cut_off_text(settings, conn, long_trailer, monkeypatch):
+    mock_sources()
+    monkeypatch.setattr("shorts.pipeline._require_trailer", lambda job: None)
+    monkeypatch.setattr("shorts.pipeline.collect_steam_assets", steam_media(long_trailer))
+    deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07),
+                        read_text=TextReader("REQUIRES"))
+    with pytest.raises(PipelineError, match="clean trailer footage"):
+        make_video(NEWS, 2, VideoFormat.NEWS_FLASH, trailer_only(settings), deps, conn)
+
+
+@respx.mock
+def test_e2e_trailer_only_game_without_a_trailer_fails_before_the_script(settings, conn):
+    mock_sources()  # the Steam page has screenshots but no trailers
+    llm = ScriptedLLM([])
+    deps = PipelineDeps(httpx.Client(), llm, FakeTTS(rate=0.07), read_text=TextReader())
+    with pytest.raises(PipelineError, match="no trailer"):
+        make_video(NEWS, 2, VideoFormat.NEWS_FLASH, trailer_only(settings), deps, conn)
+
+
+@respx.mock
+def test_e2e_a_trailer_the_text_reader_chokes_on_is_skipped(settings, conn, long_trailer, synthetic_video,
+                                                           monkeypatch):
+    mock_sources()
+    monkeypatch.setattr("shorts.pipeline._require_trailer", lambda job: None)
+
+    def two_trailers(*args, **kwargs):
+        broken, good = steam_media(synthetic_video)()[0], steam_media(long_trailer)()[0]
+        return [broken, good]
+
+    class ChokesOnce(TextReader):
+        def __call__(self, frame):
+            if self.calls == 0:
+                self.calls += 1
+                raise RuntimeError("onnxruntime fell over")
+            return super().__call__(frame)
+
+    monkeypatch.setattr("shorts.pipeline.collect_steam_assets", two_trailers)
+    deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07), read_text=ChokesOnce())
+    r = make_video(NEWS, 2, VideoFormat.NEWS_FLASH, trailer_only(settings), deps, conn)
+    assert r.video_path.exists()

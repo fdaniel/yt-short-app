@@ -53,6 +53,8 @@ def _render_segment(item: TimelineItem, out: Path, timeout_s: int) -> None:
     if item.kind == "shot":
         shot = item.shot
         plan = choose_crop(shot.source, shot.start, shot.end)
+        if item.centre_crop:  # checked for cut-off text in the centre: keep only the letterbox bars' cut
+            plan = CropPlan(CropMode.CENTER, top=plan.top, height=plan.height)
         inputs = ["-ss", f"{shot.start:.3f}", "-t", length, "-i", str(shot.source)]
         background = _shot_filter(plan)
     else:

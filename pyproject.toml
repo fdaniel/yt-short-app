@@ -23,6 +23,7 @@ dependencies = [
     "feedparser>=6",
     "google-auth-oauthlib>=1.2",
     "google-api-python-client>=2.130",
+    "rapidocr-onnxruntime>=1.4.4",  # reads on-screen text in trailers (Apache-2.0)
 ]
 
 [project.optional-dependencies]

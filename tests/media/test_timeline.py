@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from shorts.media.shots import Shot
-from shorts.media.timeline import Card, TimelineError, plan_timeline
+from shorts.media.timeline import Card, TimelineError, plan_moving_timeline, plan_timeline
 
 
 def shot(i, length=6.0, name="t"):
@@ -181,3 +181,45 @@ def test_clips_share_the_footage_limit_with_the_trailer():
                  clips=[shot(i, name="c") for i in range(20)])
     moving = sum(i.duration for i in items if i.kind == "shot")
     assert moving < 0.5 * 40.0
+
+
+def clip(start, length=4.0, score=1.0, name="trailer"):
+    return Shot(Path(f"{name}.mp4"), 1, start, start + length, score)
+
+
+def test_moving_only_fills_the_video_exactly_with_trailer_clips():
+    items = plan_moving_timeline(30.0, [clip(10.0 * i) for i in range(12)])
+    assert sum(i.duration for i in items) == pytest.approx(30.0, abs=0.01)
+    assert all(i.kind == "shot" and i.overlay is None and i.image is None for i in items)
+
+
+def test_moving_only_crops_the_centre_the_text_check_looked_at():
+    assert all(i.centre_crop for i in plan_moving_timeline(12.0, [clip(10.0 * i) for i in range(6)]))
+
+
+def test_moving_only_opens_with_the_liveliest_whole_clip():
+    clips = [clip(0.0), clip(10.0, length=2.0, score=9.0), clip(20.0, score=5.0), clip(30.0), clip(40.0)]
+    assert plan_moving_timeline(10.0, clips)[0].shot.start == 20.0
+
+
+def test_moving_only_takes_clips_from_the_whole_trailer_in_order():
+    items = plan_moving_timeline(16.0, [clip(10.0 * i) for i in range(20)])
+    starts = [i.shot.start for i in items[1:]]
+    assert starts == sorted(starts) and starts[-1] >= 150.0  # not just the first scenes
+
+
+def test_moving_only_never_ends_on_a_flash_of_a_clip():
+    items = plan_moving_timeline(12.2, [clip(10.0 * i) for i in range(6)])
+    assert min(i.duration for i in items) >= 1.0
+    assert sum(i.duration for i in items) == pytest.approx(12.2, abs=0.01)
+
+
+def test_moving_only_without_enough_clean_footage_fails():
+    with pytest.raises(TimelineError, match="clean trailer footage"):
+        plan_moving_timeline(30.0, [clip(0.0), clip(10.0)])
+
+
+def test_moving_only_takes_the_time_for_the_last_piece_without_making_another_a_flash():
+    items = plan_moving_timeline(16.3, [clip(10.0 * i, length=1.6) for i in range(20)])
+    assert min(i.duration for i in items) >= 1.0
+    assert sum(i.duration for i in items) == pytest.approx(16.3, abs=0.01)

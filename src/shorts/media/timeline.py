@@ -13,6 +13,7 @@ _EPSILON = 1e-6  # clips cut to exactly one slot can come out a hair short in fl
 ADJACENT_S = 0.15  # scenes this close are back to back: the trailer's own cut, nothing skipped between
 SPREAD_SLOTS = 1  # trailer pieces picked first are at least this many slots apart
 OVERLAY_EVERY = 3  # after the hook, a text panel on every third slot: the footage stays the star
+MIN_PIECE_S = 1.0  # shorter than this, a clip is a flash, not a shot
 
 
 class TimelineError(Exception):
@@ -32,6 +33,7 @@ class TimelineItem:
     shot: Shot | None
     image: Path | None
     overlay: Path | None = None
+    centre_crop: bool = False  # the centre 9:16 of the picture: the part checked for cut-off text
 
 
 def slot_length(duration: float, slot_s: float) -> float:
@@ -158,3 +160,56 @@ def plan_timeline(
             background = replace(background, overlay=_overlay_for(i, cards))
         items.append(background)
     return items
+
+
+def _spread_pick(clips: list[Shot], seconds: float) -> list[Shot]:
+    """Clips evenly spaced over the trailer until they add up to `seconds`, then the gaps in between."""
+    ordered = sorted(clips, key=lambda c: (str(c.source), c.start))
+    mean = sum(c.end - c.start for c in ordered) / len(ordered)
+    count = min(len(ordered), ceil(seconds / mean - _EPSILON))
+    step = (len(ordered) - 1) / max(count - 1, 1)
+    picked = list(dict.fromkeys(ordered[round(k * step)] for k in range(count)))
+    for c in ordered:
+        if sum(p.end - p.start for p in picked) >= seconds - _EPSILON:
+            break
+        if c not in picked:
+            picked.append(c)
+    return sorted(picked, key=lambda c: (str(c.source), c.start))
+
+
+def _no_flash_at_the_end(lengths: list[float]) -> list[float]:
+    """A last piece shorter than MIN_PIECE_S takes the missing time from the pieces before it, the longest
+    first and the opener last, never leaving one of them shorter than MIN_PIECE_S."""
+    if len(lengths) < 2 or lengths[-1] >= MIN_PIECE_S:
+        return lengths
+    out, deficit = list(lengths), MIN_PIECE_S - lengths[-1]
+    donors = sorted(range(1, len(out) - 1), key=lambda i: out[i], reverse=True) + [0]
+    for i in donors:
+        give = min(deficit, max(0.0, out[i] - MIN_PIECE_S))
+        out[i] -= give
+        deficit -= give
+        if deficit <= _EPSILON:
+            break
+    out[-1] = MIN_PIECE_S - deficit
+    return out
+
+
+def plan_moving_timeline(duration: float, clips: Sequence[Shot]) -> list[TimelineItem]:
+    """Only moving trailer footage, each clip already checked for cut-off text: the liveliest whole clip
+    opens, then clips from across the trailers in their own order. No screenshots, no text panels."""
+    total = sum(c.end - c.start for c in clips)
+    if total < duration - _EPSILON:
+        raise TimelineError(f"only {total:.1f}s of clean trailer footage for a {duration:.1f}s video")
+    longest = max(c.end - c.start for c in clips)
+    opener = max((c for c in clips if c.end - c.start >= longest - _EPSILON), key=lambda c: c.score)
+    rest = [c for c in clips if c is not opener]
+    needed = duration - (opener.end - opener.start)
+    chosen = [opener] + (_spread_pick(rest, needed) if needed > _EPSILON else [])
+    lengths, left = [], duration
+    for c in chosen:
+        if left <= _EPSILON:
+            break
+        lengths.append(min(c.end - c.start, left))
+        left -= lengths[-1]
+    return [TimelineItem("shot", length, replace(c, end=c.start + length), None, centre_crop=True)
+            for c, length in zip(chosen, _no_flash_at_the_end(lengths))]

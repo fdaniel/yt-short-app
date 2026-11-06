@@ -17,12 +17,14 @@ from shorts.captions import chunk_captions, write_ass
 from shorts.config import Settings
 from shorts.llm.base import LLMProvider
 from shorts.media.cards import render_fact_card, render_hook_card, render_still
-from shorts.media.ffmpeg import FFmpegError
+from shorts.media.cover import cover_frame, render_cover
+from shorts.media.ffmpeg import FFmpegError, probe_video
 from shorts.media import brand
 from shorts.media.render import render_video
 from shorts.media.sting import VOICE_LEAD_S, write_sting
 from shorts.media.shots import Shot, detect_shots
-from shorts.media.timeline import Card, plan_timeline, usable_trailer_shots
+from shorts.media.textscan import TextReader, rapidocr_reader, scan_trailer
+from shorts.media.timeline import Card, TimelineItem, plan_moving_timeline, plan_timeline, usable_trailer_shots
 from shorts.metadata import build_metadata, content_hash, write_metadata
 from shorts.models import Asset, AssetKind, RightsBasis, VideoFormat, VideoStatus
 from shorts.music import pick_music
@@ -57,6 +59,10 @@ CLOSING_SPEED = 1.0
 CLOSING_GAP_S = 0.4
 RECENT_CLOSINGS = 8  # shown to the script writer so each closing starts differently from the last ones
 MIN_PRESS_IMAGES = 4  # fewer official photos and clips than this: licensed stock video fills in
+# trailer-only: a trailer's first and last seconds are logos, ratings and store end cards
+TRAILER_HEAD_S, TRAILER_TAIL_S = 3.0, 8.0
+CARD_PREFIX = "card_"  # generated text cards: never a cover picture
+CLEAN_FOOTAGE_MARGIN = 1.5  # clean footage wanted, as a multiple of the video: enough to spread over the trailers
 _MOVING = (AssetKind.STOCK_VIDEO, AssetKind.PRESS_VIDEO)
 
 
@@ -69,6 +75,7 @@ class PipelineDeps:
     http: httpx.Client
     llm: LLMProvider
     tts: TTSEngine
+    read_text: TextReader | None = None  # reads on-screen text; None = the free RapidOCR reader
 
 
 @dataclass(frozen=True)
@@ -85,6 +92,7 @@ class _Visuals:
     stock: list[Shot]
     stills: list[Path]
     clips: list[Shot]  # the company's own clips, also first in `stock`
+    moving_only: bool = False  # trailer-only: `trailer` holds clips already checked for cut-off text
 
 
 @dataclass(frozen=True)
@@ -133,6 +141,8 @@ def _produce(job: _Job) -> VideoResult:
     videos = VideoRepository(job.conn)
     s = job.settings
     article = job.article or fetch_article(job.deps.http, job.news_url, max_bytes=s.limits.max_html_bytes)
+    if job.steam_app_id is not None and s.video.footage == "trailer_only":
+        _require_trailer(job)  # before the script and voice: they are wasted on a game with no trailer
     draft = write_checked_script(article, job.fmt, job.deps.llm, s.video, videos.recent_closings(RECENT_CLOSINGS),
                                  closing_turn=job.video_id)
     videos.save_script(job.video_id, draft.model_dump_json(), draft.title_options[0])
@@ -183,7 +193,7 @@ def _render(job: _Job, draft: ScriptDraft, article: Article, *, take: str = "") 
     total = narration.duration + brand.OUTRO_S
     visuals = _gather_visuals(draft, article, job, total)
     assets = visuals.assets
-    items = plan_timeline(
+    items = plan_moving_timeline(total, visuals.trailer) if visuals.moving_only else plan_timeline(
         total, trailer=visuals.trailer, stock=visuals.stock, stills=visuals.stills, clips=visuals.clips,
         cards=_card_pairs(assets),
         slot_s=s.video.slot_s, max_shot_s=s.video.max_shot_s, max_trailer_share=s.video.max_trailer_share,
@@ -200,12 +210,40 @@ def _render(job: _Job, draft: ScriptDraft, article: Article, *, take: str = "") 
     (job.work / "article.json").write_text(json.dumps(asdict(article), ensure_ascii=False), encoding="utf-8")
     ready = {"video.mp4": rendered, "metadata.json": write_metadata(meta, job.work / "metadata.json"),
              "article.json": job.work / "article.json"}
+    cover = _cover(items, draft, job)
+    if cover is not None:
+        ready["cover.png"] = cover
     export = s.data_dir / "exports" / str(job.video_id)
     export.mkdir(parents=True, exist_ok=True)
     for name, path in ready.items():
         path.replace(export / name)
+    if "cover.png" not in ready:
+        (export / "cover.png").unlink(missing_ok=True)  # an older cover would no longer match the video
     videos.save_output(job.video_id, export / "video.mp4", export / "metadata.json", digest)
     return VideoResult(job.video_id, export / "video.mp4", export / "metadata.json")
+
+
+def _cover(items: list[TimelineItem], draft: ScriptDraft, job: _Job) -> Path | None:
+    """The cover image from the video's first footage and the script's cover words; None when there are
+    no cover words or it could not be made (a cover is a bonus, never a reason to lose the video)."""
+    if not draft.cover_lines:
+        return None
+    source = _cover_source(items)
+    if source is None:
+        return None
+    try:
+        picture = cover_frame(source, job.work / "cover_frame.png") if isinstance(source, Shot) else source
+        return render_cover(picture, draft.cover_lines, job.work / "cover.png")
+    except Exception as exc:  # noqa: BLE001 - OpenCV and Pillow raise their own types; the video comes first
+        log.warning("No cover for video %s: %s", job.video_id, exc)
+        return None
+
+
+def _cover_source(items: list[TimelineItem]) -> Shot | Path | None:
+    """The video's first footage, or else its first screenshot or photo; never a text card."""
+    shot = next((i.shot for i in items if i.kind == "shot" and i.shot), None)
+    pictures = (i.image for i in items if i.image and not i.image.name.startswith(CARD_PREFIX))
+    return shot or next(pictures, None)
 
 
 def _narrate(draft: ScriptDraft, job: _Job) -> Narration:
@@ -219,12 +257,13 @@ def _narrate(draft: ScriptDraft, job: _Job) -> Narration:
     return narration
 
 
-def _steam_assets(job: _Job, blocked: set[str]) -> list[Asset]:
+def _steam_assets(job: _Job, blocked: set[str], *, screenshots: bool = True) -> list[Asset]:
     if job.steam_app_id is None:
         return []
     try:
         app = fetch_steam_app(job.deps.http, job.steam_app_id, max_bytes=job.settings.limits.max_html_bytes)
-        return collect_steam_assets(app, job.deps.http, job.work / "steam", job.settings, blocked)
+        extra = {} if screenshots else {"max_screenshots": 0}
+        return collect_steam_assets(app, job.deps.http, job.work / "steam", job.settings, blocked, **extra)
     except _STEAM_ERRORS as exc:
         log.warning("Steam media unavailable for app %s, using generated visuals: %s", job.steam_app_id, exc)
         return []
@@ -301,22 +340,60 @@ def _cards(draft: ScriptDraft, article: Article, job: _Job) -> list[Asset]:
     font = job.settings.font_file
     job.work.mkdir(parents=True, exist_ok=True)
     hook = narration_lines(draft)[0]
-    paths = [render_hook_card(hook, job.work / "card_hook.png", font)]
+    paths = [render_hook_card(hook, job.work / f"{CARD_PREFIX}hook.png", font)]
     render_hook_card(hook, _overlay_path(paths[0]), font, overlay=True)
     if draft.card_facts:
         title = clean_text(article.title or draft.title_options[0])
         # the all-facts table is full screen only: as a panel it would cover most of the footage
-        paths.append(render_fact_card(title, draft.card_facts, job.work / "card_facts.png", font))
+        paths.append(render_fact_card(title, draft.card_facts, job.work / f"{CARD_PREFIX}facts.png", font))
         for i, fact in enumerate(draft.card_facts):
-            paths.append(render_fact_card(title, [fact], job.work / f"card_fact_{i}.png", font))
+            paths.append(render_fact_card(title, [fact], job.work / f"{CARD_PREFIX}fact_{i}.png", font))
             render_fact_card(title, [fact], _overlay_path(paths[-1]), font, overlay=True)
     return [_card(path) for path in paths]  # an overlay is the same generated card, logged once
+
+
+def _require_trailer(job: _Job) -> None:
+    app = fetch_steam_app(job.deps.http, job.steam_app_id, max_bytes=job.settings.limits.max_html_bytes)
+    blocked = BlocklistRepository(job.conn).names()
+    if not app.movies or any(p.strip().lower() in blocked for p in app.publishers):
+        raise ValueError(f"no trailer for {app.name or 'this game'} on Steam: trailer-only videos need one")
+
+
+def _clean_trailer_clips(assets: list[Asset], job: _Job, duration: float) -> list[Shot]:
+    """Clips of each trailer with no on-screen text cut off by the crop, trailer by trailer until there is
+    comfortably more than the video needs."""
+    read_text = job.deps.read_text or rapidocr_reader()
+    clips: list[Shot] = []
+    for asset in (a for a in assets if a.kind == AssetKind.TRAILER):
+        if sum(c.end - c.start for c in clips) >= CLEAN_FOOTAGE_MARGIN * duration:
+            break
+        try:
+            length = probe_video(asset.local_path).duration
+            start = TRAILER_HEAD_S if length > TRAILER_HEAD_S + TRAILER_TAIL_S else 0.0
+            end = length - TRAILER_TAIL_S if start else length
+            clips += scan_trailer(asset.local_path, asset.id, read_text, start=start, end=end)
+        except Exception as exc:  # noqa: BLE001 - OpenCV and the text reader raise their own types
+            log.warning("Skipping trailer %s that could not be read: %s", asset.source_url, exc)
+    return clips
+
+
+def _trailer_only_visuals(job: _Job, blocked: set[str], duration: float) -> _Visuals:
+    """Game news made only of moving trailer footage with no sliced on-screen text."""
+    steam = _log_usable(_steam_assets(job, blocked, screenshots=False), blocked, job)
+    clips = _clean_trailer_clips(steam, job, duration)
+    if not clips:
+        raise ValueError("no clean trailer footage for this game: no trailer, or text cut off in all of it")
+    music = pick_music(job.settings.music_dir, random.Random(job.video_id))
+    rest = _log_usable([music] if music else [], blocked, job)
+    return _Visuals(steam + rest, clips, [], [], [], moving_only=True)
 
 
 def _gather_visuals(draft: ScriptDraft, article: Article, job: _Job, duration: float) -> _Visuals:
     """Game news: only the game's own trailer and screenshots. Other news: the official article's own
     photos and clips, footage of the games it names, and licensed stock video only when that is too little."""
     blocked = BlocklistRepository(job.conn).names()
+    if job.steam_app_id is not None and job.settings.video.footage == "trailer_only":
+        return _trailer_only_visuals(job, blocked, duration)
     video = job.settings.video
     steam = _log_usable(_steam_assets(job, blocked) + _named_game_assets(draft, article, job, blocked), blocked, job)
     trailer = usable_trailer_shots(_trailer_shots(steam), duration, slot_s=video.slot_s, max_shot_s=video.max_shot_s)

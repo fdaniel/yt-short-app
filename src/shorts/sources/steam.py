@@ -18,6 +18,8 @@ log = logging.getLogger(__name__)
 
 APPDETAILS_URL = "https://store.steampowered.com/api/appdetails?appids={app_id}&cc=us&l=english"
 SEARCH_URL = "https://store.steampowered.com/api/storesearch/"
+# people playing the game on Steam right now: the Steam Web API's own count, no key needed
+PLAYERS_URL = "https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid={app_id}"
 SEARCH_MAX_BYTES = 1_000_000
 MAX_TRAILERS = 3
 MAX_SCREENSHOTS = 12  # enough that a video never has to show the same picture twice
@@ -83,6 +85,20 @@ def fetch_steam_app(client: httpx.Client, app_id: int, *, max_bytes: int) -> Ste
         return parse_appdetails(app_id, json.loads(body))
     except json.JSONDecodeError as exc:
         raise SteamError(f"Steam returned invalid data for app {app_id}") from exc
+
+
+def parse_player_count(payload: dict) -> int | None:
+    """Players right now; None for a game Steam has no count for (unreleased: result 42)."""
+    response = payload.get("response") or {}
+    return int(response.get("player_count") or 0) if response.get("result") == 1 else None
+
+
+def fetch_player_count(client: httpx.Client, app_id: int, *, max_bytes: int) -> int | None:
+    body = fetch_text(client, PLAYERS_URL.format(app_id=app_id), max_bytes=max_bytes)
+    try:
+        return parse_player_count(json.loads(body))
+    except (json.JSONDecodeError, AttributeError, TypeError, ValueError) as exc:
+        raise SteamError(f"Steam returned an invalid player count for app {app_id}") from exc
 
 
 def _asset(kind: AssetKind, path: Path, url: str, app: SteamApp, terms: str) -> Asset:

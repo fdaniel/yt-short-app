@@ -117,3 +117,9 @@ def test_the_closing_style_takes_turns_from_video_to_video():
     assert len(set(prompts)) == len(CLOSING_STYLES)
     assert prompts[0] == build_script_prompt(article(), VideoFormat.NEWS_FLASH, [], VideoSettings(),
                                              closing_turn=len(CLOSING_STYLES))
+
+
+def test_prompt_asks_for_cover_lines_and_titles_that_stop_the_scroll_but_stay_true():
+    p = build_script_prompt(article(), VideoFormat.NEWS_FLASH, [], VideoSettings())
+    assert "cover_lines" in p
+    assert "stop scrolling" in p and "must be true" in p

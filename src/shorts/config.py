@@ -71,6 +71,10 @@ class VideoSettings(_Frozen):
     max_words: int = 80
     max_shot_s: float = 4.0
     max_trailer_share: float = 0.49
+    # game news: "mixed" = trailer scenes, screenshots and text panels, trailer under max_trailer_share;
+    # "trailer_only" = only moving trailer footage, checked for on-screen text cut off by the 9:16 crop
+    # (owner 2026-11-05: "real footage, like gameplay or trailer"); a trailer with too little is skipped
+    footage: Literal["mixed", "trailer_only"] = "mixed"
     slot_s: float = 3.5
     max_output_mb: int = 50
     music_volume: float = 0.12
@@ -131,6 +135,9 @@ class DiscoverySettings(_Frozen):
     history_days: int = 14
     duplicate_similarity: float = 0.5
     weights: ScoreWeights = ScoreWeights()
+    # game news only for games this many people are playing on Steam right now (0 = every game);
+    # small games got ~500 views and made the channel look mass-produced
+    min_steam_players: int = 0
     # popular games' own Steam announcements, from Steam's store lists (empty = off)
     steam_lists: tuple[str, ...] = ("popularwishlist", "topsellers")
     steam_games_per_list: int = 25

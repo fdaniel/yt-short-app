@@ -141,3 +141,13 @@ def test_wide_screenshot_pans_and_fills_the_screen(scene, settings, tmp_path):
 
     assert column(late) < column(early) - 200  # the picture moved left: the camera pans right
     assert mean(late, (0, 1700, 1080, 1900)) > 60  # no dark bands
+
+
+def test_a_text_checked_clip_shows_the_centre_not_the_subject(scene, settings, tmp_path):
+    # the white box sits far left: following it would show text the check never looked at
+    work, narration, ass, items = scene
+    left = items[2].shot
+    checked = [TimelineItem("shot", 10.0, Shot(left.source, 2, 0.5, 5.5, 1.0), None, centre_crop=True)]
+    out = render_video(checked, narration, ass, None, work / "video.mp4", settings)
+    frame = frame_at(out, 3, tmp_path / "f.png")
+    assert mean(frame, (0, 300, 1080, 1200)) < 40

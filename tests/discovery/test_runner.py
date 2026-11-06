@@ -377,3 +377,100 @@ def test_a_story_dated_a_few_hours_ahead_is_left_for_a_later_run_not_set_aside(c
     run(cfg, conn, ScriptedLLM([]), make)
     assert make.calls == []
     assert conn.execute("SELECT COUNT(*) FROM topics").fetchone()[0] == 0
+
+
+def big_games_only(cfg, players=20_000):
+    return cfg.model_copy(update={"discovery": cfg.discovery.model_copy(update={"min_steam_players": players})})
+
+
+def mock_players(count):
+    from shorts.sources.steam import PLAYERS_URL
+
+    answer = {"response": {"player_count": count, "result": 1}} if count is not None else {"response": {"result": 42}}
+    return respx.get(PLAYERS_URL.format(app_id=4435490)).respond(200, json=answer)
+
+
+@respx.mock
+def test_news_about_a_small_game_is_skipped_with_the_reason(cfg, conn):
+    mock_feeds(hw=[], games=GAME_ITEMS)
+    mock_players(4_728)
+    make = FakeMake(conn)
+    report = run(big_games_only(cfg), conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game="Modern Warfare 4")])]), make)
+    assert make.calls == [] and report.made == ()
+    row = conn.execute("SELECT status, explanation FROM topics").fetchone()
+    assert row["status"] == "skipped" and "4,728" in row["explanation"] and "20,000" in row["explanation"]
+
+
+@respx.mock
+def test_a_press_story_about_an_unreleased_game_counts_as_small(cfg, conn):
+    mock_feeds(hw=[], games=GAME_ITEMS)
+    mock_players(None)
+    make = FakeMake(conn)
+    run(big_games_only(cfg), conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game="Modern Warfare 4")])]), make)
+    assert make.calls == []
+    assert "not out yet" in conn.execute("SELECT explanation FROM topics").fetchone()["explanation"]
+
+
+@respx.mock
+def test_an_unreleased_game_on_steams_popular_lists_is_big_enough(cfg, conn):
+    # Steam's most-wishlisted games have no players yet, and they are the hyped ones
+    from tests.discovery.test_steam_news import mock_list, row, steam_rss
+    from shorts.sources.steam import PLAYERS_URL
+
+    mock_feeds(hw=[], games=[])
+    mock_list("popularwishlist", row(3764200, "Resident Evil Requiem"))
+    respx.get(NEWS_FEED_URL.format(app_id=3764200)).respond(200, text=steam_rss(("New trailer", 2)))
+    respx.get(PLAYERS_URL.format(app_id=3764200)).respond(200, json={"response": {"result": 42}})
+    cfg = big_games_only(cfg)
+    cfg = cfg.model_copy(update={"discovery": cfg.discovery.model_copy(update={"steam_lists": ("popularwishlist",)})})
+    make = FakeMake(conn)
+    run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 8, game="Resident Evil Requiem")])]), make)
+    assert make.calls[0][1] == 3764200
+
+
+@respx.mock
+def test_a_game_just_under_the_bar_is_looked_at_again_next_run(cfg, conn):
+    # player counts rise and fall through the day: 15,000 at 4 AM can be 30,000 in the evening
+    mock_feeds(hw=[], games=GAME_ITEMS)
+    mock_players(15_000)
+    make = FakeMake(conn)
+    run(big_games_only(cfg), conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game="Modern Warfare 4")])]), make)
+    assert make.calls == [] and conn.execute("SELECT COUNT(*) FROM topics").fetchone()[0] == 0
+
+
+@respx.mock
+def test_news_about_a_big_game_is_made(cfg, conn):
+    mock_feeds(hw=[], games=GAME_ITEMS)
+    mock_players(152_576)
+    make = FakeMake(conn)
+    run(big_games_only(cfg), conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game="Modern Warfare 4")])]), make)
+    assert make.calls[0][1] == 4435490
+
+
+@respx.mock
+def test_tech_news_needs_no_player_count(cfg, conn):
+    mock_feeds(hw=HW_ITEMS[:1], games=[])
+    players = respx.get(url__startswith="https://api.steampowered.com/")
+    make = FakeMake(conn)
+    run(big_games_only(cfg), conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9)])]), make)
+    assert len(make.calls) == 1 and not players.called
+
+
+@respx.mock
+def test_player_count_unavailable_leaves_the_story_for_the_next_run(cfg, conn):
+    from shorts.sources.steam import PLAYERS_URL
+
+    mock_feeds(hw=[], games=GAME_ITEMS)
+    respx.get(PLAYERS_URL.format(app_id=4435490)).respond(503)
+    make = FakeMake(conn)
+    run(big_games_only(cfg), conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game="Modern Warfare 4")])]), make)
+    assert make.calls == [] and conn.execute("SELECT COUNT(*) FROM topics").fetchone()[0] == 0
+
+
+@respx.mock
+def test_player_count_is_not_checked_when_the_setting_is_off(cfg, conn):
+    mock_feeds(hw=[], games=GAME_ITEMS)
+    players = respx.get(url__startswith="https://api.steampowered.com/")
+    make = FakeMake(conn)
+    run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game="Modern Warfare 4")])]), make)
+    assert len(make.calls) == 1 and not players.called
