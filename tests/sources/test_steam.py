@@ -208,6 +208,21 @@ def test_player_count_is_fetched_from_the_steam_web_api():
 
 
 @respx.mock
+def test_an_unreleased_game_has_no_player_count_even_though_steam_answers_404():
+    # what Steam really sent for Die or Die (3842190) on 2026-11-09
+    respx.get(PLAYERS_URL.format(app_id=3842190)).respond(404, json={"response": {"result": 42}})
+    with httpx.Client() as client:
+        assert fetch_player_count(client, 3842190, max_bytes=10_000) is None
+
+
+@respx.mock
+def test_a_plain_404_is_still_an_error():
+    respx.get(PLAYERS_URL.format(app_id=2)).respond(404, text="Not Found")
+    with httpx.Client() as client, pytest.raises((SteamError, httpx.HTTPError)):
+        fetch_player_count(client, 2, max_bytes=10_000)
+
+
+@respx.mock
 def test_a_garbled_player_count_answer_is_a_steam_error():
     respx.get(PLAYERS_URL.format(app_id=1)).respond(200, text="<html>")
     with httpx.Client() as client, pytest.raises(SteamError):

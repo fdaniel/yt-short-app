@@ -93,8 +93,21 @@ def parse_player_count(payload: dict) -> int | None:
     return int(response.get("player_count") or 0) if response.get("result") == 1 else None
 
 
+def _no_count(body: str) -> bool:
+    try:
+        return (json.loads(body).get("response") or {}).get("result") == 42
+    except (json.JSONDecodeError, AttributeError):
+        return False
+
+
 def fetch_player_count(client: httpx.Client, app_id: int, *, max_bytes: int) -> int | None:
-    body = fetch_text(client, PLAYERS_URL.format(app_id=app_id), max_bytes=max_bytes)
+    try:
+        body = fetch_text(client, PLAYERS_URL.format(app_id=app_id), max_bytes=max_bytes)
+    except httpx.HTTPStatusError as exc:
+        # Steam sends "no count" (result 42, an unreleased game) with a 404 status
+        if exc.response.status_code != 404 or not _no_count(exc.response.text):
+            raise
+        return None
     try:
         return parse_player_count(json.loads(body))
     except (json.JSONDecodeError, AttributeError, TypeError, ValueError) as exc:
