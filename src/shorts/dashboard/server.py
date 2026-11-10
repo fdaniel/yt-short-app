@@ -160,6 +160,14 @@ class _Handler(BaseHTTPRequestHandler):
         except OSError:
             pass  # the browser stopped playing, seeked elsewhere or went quiet
 
+    def _refresh_channel(self) -> None:
+        try:
+            self.server.set_notice(self.server.dashboard.refresh_channel())
+        except Exception as exc:  # a button must never leave the owner on a broken page
+            log.exception("Channel refresh failed")
+            self.server.set_notice(f"Channel numbers not updated: {exc}")
+        self._send(HTTPStatus.SEE_OTHER, headers={"Location": "/?tab=channel"})
+
     def _origin_ok(self) -> bool:
         origin = self.headers.get("Origin")
         return origin is None or origin in {f"http://{host}" for host in self.server.allowed_hosts}
@@ -181,7 +189,11 @@ class _Handler(BaseHTTPRequestHandler):
         if not self._origin_ok() or not hmac.compare_digest(form.get("token", ""), self.server.token):
             self._send(HTTPStatus.FORBIDDEN, b"Refused: reload the dashboard and try again")
             return
-        match = _ACTION.fullmatch(urlsplit(self.path).path)
+        path = urlsplit(self.path).path
+        if path == "/channel/refresh":
+            self._refresh_channel()
+            return
+        match = _ACTION.fullmatch(path)
         if match is None:
             self._send(HTTPStatus.NOT_FOUND, b"Not found")
             return

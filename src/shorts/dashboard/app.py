@@ -29,6 +29,7 @@ TABS: dict[str, tuple[VideoStatus, ...]] = {
     "discarded": (VideoStatus.DISCARDED, VideoStatus.EXPIRED),
     "failed": (VideoStatus.FAILED,),
 }
+CHANNEL_TAB = "channel"  # the channel watcher's page, next to the video tabs
 MAX_VIDEOS = 300
 RUN_LOG_TAIL_BYTES = 64 * 1024
 RUN_LOG_LINES = 8
@@ -45,6 +46,11 @@ def _already(video_id: int, status: VideoStatus) -> str:
         VideoStatus.DISCARDED: "discarded",
     }
     return f"Video #{video_id} is {states.get(status, status.value.replace('_', ' '))}."
+
+
+class Watcher(Protocol):
+    def report(self, tz: Any = None) -> Any: ...
+    def refresh(self) -> str: ...
 
 
 class Account(Protocol):
@@ -79,6 +85,8 @@ class DashboardView:
     privacy: str = "public"
     can_schedule: bool = False
     takes: bool = False  # the owner can add their own closing line
+    report: Any = None  # the channel watcher's report, on the Channel tab
+    watching: bool = False  # a channel watcher is set up
 
 
 def _load_meta(path: Path | None) -> dict[str, Any]:
@@ -124,8 +132,10 @@ def _in_background(job: Callable[[], None]) -> None:
 class Dashboard:
     def __init__(self, settings: Settings, account: Account, opener: Callable[[Path], object], *,
                  remake: Callable[[int, str], None] | None = None,
-                 background: Callable[[Callable[[], None]], None] = _in_background) -> None:
+                 background: Callable[[Callable[[], None]], None] = _in_background,
+                 watcher: Watcher | None = None) -> None:
         self._settings = settings
+        self._watcher = watcher
         self._account = account
         self._opener = opener
         self._publish_lock = threading.RLock()  # also held while a take starts, so nothing publishes it meanwhile
@@ -144,12 +154,13 @@ class Dashboard:
             conn.close()
 
     def view(self, tab: str) -> DashboardView:
-        tab = tab if tab in TABS else "review"
+        tab = tab if tab in TABS or tab == CHANNEL_TAB else "review"
         with self._db() as conn:
             records = VideoRepository(conn).list_recent(MAX_VIDEOS)
             topics = TopicRepository(conn)
-            cards = tuple(self._card(r, topics) for r in records if r.status in TABS[tab])
+            cards = tuple(self._card(r, topics) for r in records if r.status in TABS.get(tab, ()))
             made_today = topics.videos_made_on(date.today())
+        report = self._watcher.report() if tab == CHANNEL_TAB and self._watcher else None
         return DashboardView(
             tab=tab,
             cards=cards,
@@ -161,7 +172,14 @@ class Dashboard:
             privacy=self._settings.youtube.privacy_status,
             can_schedule=self._settings.youtube.audit_approved,
             takes=self._remake is not None,
+            report=report,
+            watching=self._watcher is not None,
         )
+
+    def refresh_channel(self) -> str:
+        if self._watcher is None:
+            return "The channel watcher is not available in this dashboard."
+        return self._watcher.refresh()
 
     def _card(self, record: VideoRecord, topics: TopicRepository) -> VideoCard:
         topic = topics.for_video(record.id)

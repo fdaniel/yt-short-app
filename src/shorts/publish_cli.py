@@ -7,6 +7,7 @@ import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 
+from shorts.channel.watcher import ChannelWatcher
 from shorts.config import Settings
 from shorts.dashboard.app import Dashboard
 from shorts.dashboard.server import DashboardServer
@@ -67,7 +68,9 @@ def _open(url: str) -> None:
 
 def dashboard_command(settings: Settings, port: int, open_browser: bool) -> int:
     try:
-        dashboard = Dashboard(settings, _account(settings), opener=open_on_windows, remake=_remaker(settings))
+        account = _account(settings)
+        dashboard = Dashboard(settings, account, opener=open_on_windows, remake=_remaker(settings),
+                              watcher=ChannelWatcher(settings, account))
         server = DashboardServer(dashboard, port=port)
     except OSError as exc:
         url = f"http://localhost:{port}/"
@@ -103,5 +106,6 @@ def youtube_connect_command(settings: Settings) -> int:
     except NotConnected as exc:
         print(f"Not connected: {exc}", file=sys.stderr)
         return 1
-    print(f"Connected to the YouTube channel “{channel.title}”. The dashboard can now upload with one click.")
+    print(f"Connected to the YouTube channel “{channel.title}”. The dashboard can now upload with one click,"
+          " and its Channel tab can read your numbers.")
     return 0

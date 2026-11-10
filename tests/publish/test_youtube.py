@@ -1,5 +1,6 @@
 import json
 import stat
+from pathlib import Path
 import webbrowser
 from datetime import datetime, timedelta, timezone
 
@@ -241,3 +242,88 @@ def test_scheduled_upload_is_private_until_its_publish_time():
 
 def test_upload_now_has_no_publish_time():
     assert "publishAt" not in upload_body(META, YouTubeSettings())["status"]
+
+
+class ScopedCreds:
+    def __init__(self, *scopes):
+        self.scopes = list(scopes)
+
+
+def _reader(tmp_path, creds):
+    folder = tmp_path / "youtube"
+    folder.mkdir()
+    (folder / "token.json").write_text("{}")
+    (folder / "channel.json").write_text(json.dumps({"id": "UC123", "title": "Tech Bits"}))
+    return YouTubeAccount(folder, service_factory=lambda c: "data-api", load_credentials=lambda path: creds,
+                          analytics_factory=lambda c: "analytics-api")
+
+
+def test_connecting_asks_for_youtube_analytics_too():
+    assert youtube.ANALYTICS_SCOPE in youtube.SCOPES
+
+
+def test_readers_include_analytics_when_the_owner_allowed_it(tmp_path):
+    readers = _reader(tmp_path, ScopedCreds(*youtube.SCOPES)).readers()
+    assert (readers.data, readers.analytics, readers.note) == ("data-api", "analytics-api", "")
+
+
+def test_a_connection_made_before_analytics_still_reads_the_basic_numbers(tmp_path):
+    readers = _reader(tmp_path, ScopedCreds(youtube.SCOPES[0], youtube.SCOPES[1])).readers()
+    assert readers.data == "data-api" and readers.analytics is None
+    assert "youtube-connect" in readers.note
+
+
+def test_readers_need_a_connection(tmp_path):
+    with pytest.raises(NotConnected):
+        YouTubeAccount(tmp_path / "youtube").readers()
+
+
+def test_a_saved_token_is_loaded_with_the_access_it_was_given(tmp_path):
+    # asking Google for a scope the token never had would break uploads until the owner reconnects
+    token = tmp_path / "token.json"
+    token.write_text(json.dumps({"token": "t", "refresh_token": "r", "client_id": "c", "client_secret": "s",
+                                 "scopes": list(youtube.SCOPES[:2]), "expiry": "2999-01-01T00:00:00Z"}))
+    assert youtube._load_credentials(token).scopes == list(youtube.SCOPES[:2])
+
+
+class GrantedCreds:
+    refresh_token = "secret"
+
+    def __init__(self, granted):
+        self.scopes, self.granted_scopes = list(youtube.SCOPES), list(granted)
+
+    def to_json(self):
+        return json.dumps({"refresh_token": "secret", "scopes": self.scopes})
+
+
+def _connect_with(tmp_path, creds):
+    folder = tmp_path / "youtube"
+    folder.mkdir()
+    (folder / "client_secret.json").write_text("{}")
+    channels = FakeRequest({"items": [{"id": "UC9", "snippet": {"title": "My Channel"}}]})
+    account = YouTubeAccount(folder, service_factory=lambda c: FakeService(channels=channels),
+                             authorize=lambda path: creds)
+    return account, folder
+
+
+def test_unticking_analytics_still_connects_uploads_and_saves_only_what_was_granted(tmp_path):
+    account, folder = _connect_with(tmp_path, GrantedCreds(youtube.SCOPES[:2]))
+    assert account.connect().title == "My Channel"
+    assert json.loads((folder / "token.json").read_text())["scopes"] == list(youtube.SCOPES[:2])
+
+
+def test_unticking_uploads_is_refused(tmp_path):
+    account, folder = _connect_with(tmp_path, GrantedCreds(youtube.SCOPES[1:]))
+    with pytest.raises(NotConnected, match="upload"):
+        account.connect()
+    assert not (folder / "token.json").exists()
+
+
+def test_google_accepting_fewer_boxes_is_not_an_error(monkeypatch):
+    monkeypatch.delenv("OAUTHLIB_RELAX_TOKEN_SCOPE", raising=False)
+    monkeypatch.setattr(youtube.InstalledAppFlow, "from_client_secrets_file",
+                        lambda *a, **k: (_ for _ in ()).throw(ValueError("stop here")))
+    with pytest.raises(ValueError):
+        youtube._authorize(Path("x.json"))
+    import os
+    assert os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] == "1"

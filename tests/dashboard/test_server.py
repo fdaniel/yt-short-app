@@ -202,3 +202,32 @@ def test_review_card_offers_the_cover(client, settings, make_ready_video):
     vid = make_ready_video()
     Image.new("RGB", (1080, 1920), "orange").save(settings.data_dir / "exports" / str(vid) / "cover.png")
     assert f"/videos/{vid}/cover.png?download=1" in client.get("/").text
+
+
+@pytest.fixture
+def watched(settings):
+    from tests.dashboard.conftest import FakeWatcher
+
+    watcher = FakeWatcher(message="Channel numbers updated.")
+    srv = DashboardServer(Dashboard(settings, FakeAccount(), opener=print, watcher=watcher), port=0)
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    with httpx.Client(base_url=f"http://127.0.0.1:{srv.server_address[1]}") as c:
+        yield srv, c, watcher
+    srv.shutdown()
+    srv.server_close()
+
+
+def test_refreshing_the_channel_numbers_needs_the_token(watched):
+    srv, c, watcher = watched
+    assert c.post("/channel/refresh", data={"token": "wrong"}).status_code == 403
+    assert watcher.refreshed == 0
+    response = c.post("/channel/refresh", data={"token": srv.token})
+    assert response.status_code == 303 and response.headers["location"] == "/?tab=channel"
+    assert watcher.refreshed == 1
+    assert "Channel numbers updated." in c.get("/?tab=channel").text
+
+
+def test_the_channel_page_opens(watched):
+    _, c, _ = watched
+    assert c.get("/?tab=channel").status_code == 200

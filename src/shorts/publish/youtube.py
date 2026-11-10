@@ -25,10 +25,15 @@ from shorts.config import YouTubeSettings
 
 log = logging.getLogger(__name__)
 
+ANALYTICS_SCOPE = "https://www.googleapis.com/auth/yt-analytics.readonly"  # the channel watcher's numbers
+UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload"
 SCOPES = (
-    "https://www.googleapis.com/auth/youtube.upload",
+    UPLOAD_SCOPE,
     "https://www.googleapis.com/auth/youtube.readonly",
+    ANALYTICS_SCOPE,
 )
+RECONNECT_FOR_ANALYTICS = ("the connection was made before the channel watcher: run python -m shorts youtube-connect"
+                           " once and press Allow")
 MAX_TITLE = 100
 MAX_DESCRIPTION = 5000
 MAX_TAGS_CHARS = 500
@@ -49,6 +54,15 @@ class NotConnected(YouTubeError):
 class Channel:
     id: str
     title: str
+
+
+@dataclass(frozen=True)
+class Readers:
+    """API clients for reading the channel; `analytics` is None (and `note` says why) without that access."""
+
+    data: Any
+    analytics: Any | None
+    note: str = ""
 
 
 @dataclass(frozen=True)
@@ -109,20 +123,35 @@ def _use_windows_browser() -> None:
 
 def _authorize(secrets_path: Path) -> Credentials:
     _use_windows_browser()
+    # Google lets the owner untick boxes (e.g. Analytics); without this oauthlib treats that as an error
+    os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
     flow = InstalledAppFlow.from_client_secrets_file(str(secrets_path), scopes=list(SCOPES))
     # prompt=consent: Google only hands out the lasting (refresh) token when asked to show consent again.
     return flow.run_local_server(port=0, open_browser=True, prompt="consent")
 
 
 def _load_credentials(token_path: Path) -> Credentials:
-    creds = Credentials.from_authorized_user_file(str(token_path), list(SCOPES))
+    # the scopes saved with the token: asking for one it was never given makes Google refuse the refresh
+    creds = Credentials.from_authorized_user_file(str(token_path))
     if not creds.valid:
         creds.refresh(Request())
     return creds
 
 
+def _token_json(creds: Any, granted: list[str]) -> str:
+    """The saved token lists only what the owner allowed: refreshing with a scope that was never granted fails."""
+    data = json.loads(creds.to_json())
+    if granted:
+        data["scopes"] = granted
+    return json.dumps(data)
+
+
 def _service(creds: Credentials) -> Any:
     return build("youtube", "v3", credentials=creds, cache_discovery=False)
+
+
+def _analytics_service(creds: Credentials) -> Any:
+    return build("youtubeAnalytics", "v2", credentials=creds, cache_discovery=False)
 
 
 def _http_message(exc: HttpError) -> str:
@@ -142,9 +171,11 @@ class YouTubeAccount:
         service_factory: Callable[[Any], Any] = _service,
         authorize: Callable[[Path], Any] = _authorize,
         load_credentials: Callable[[Path], Any] = _load_credentials,
+        analytics_factory: Callable[[Any], Any] = _analytics_service,
     ) -> None:
         self._folder = folder
         self._service_factory = service_factory
+        self._analytics_factory = analytics_factory
         self._authorize = authorize
         self._load_credentials = load_credentials
 
@@ -174,6 +205,10 @@ class YouTubeAccount:
         if not getattr(creds, "refresh_token", None):
             raise NotConnected("Google did not grant lasting access: remove the app at"
                                " https://myaccount.google.com/permissions and connect again")
+        granted = list(getattr(creds, "granted_scopes", None) or [])
+        if granted and UPLOAD_SCOPE not in granted:
+            raise NotConnected("upload access was not allowed on the Google page: run this again and leave the"
+                               " upload box ticked")
         try:
             items = self._service_factory(creds).channels().list(part="snippet", mine=True).execute().get("items", [])
         except HttpError as exc:
@@ -182,21 +217,32 @@ class YouTubeAccount:
         if not items:
             raise NotConnected("that Google account has no YouTube channel yet: create one, then connect again")
         channel = Channel(id=items[0]["id"], title=items[0]["snippet"]["title"])
-        self._write_private(TOKEN, creds.to_json())
+        self._write_private(TOKEN, _token_json(creds, granted))
         self._write_private(CHANNEL, json.dumps({"id": channel.id, "title": channel.title}))
         return channel
 
-    def upload(self, video_path: Path, body: dict[str, Any]) -> UploadResult:
+    def _credentials(self) -> Any:
         if self.channel() is None:
             raise NotConnected("YouTube is not connected: run python -m shorts youtube-connect")
         try:
-            creds = self._load_credentials(self._folder / TOKEN)
+            return self._load_credentials(self._folder / TOKEN)
         except (RefreshError, ValueError) as exc:
             log.warning("Saved YouTube connection unusable: %s", exc)
             raise NotConnected("Google no longer accepts the saved connection (revoked, expired or damaged):"
                                " run python -m shorts youtube-connect to connect again") from exc
         except TransportError as exc:
             raise YouTubeError(f"could not reach Google: {exc}") from exc
+
+    def readers(self) -> Readers:
+        """Read-only access to the channel's numbers, with YouTube Analytics when the owner allowed it."""
+        creds = self._credentials()
+        data = self._service_factory(creds)
+        if ANALYTICS_SCOPE not in (getattr(creds, "scopes", None) or ()):
+            return Readers(data, None, RECONNECT_FOR_ANALYTICS)
+        return Readers(data, self._analytics_factory(creds))
+
+    def upload(self, video_path: Path, body: dict[str, Any]) -> UploadResult:
+        creds = self._credentials()
         media = MediaFileUpload(str(video_path), mimetype="video/mp4", resumable=True)
         request = self._service_factory(creds).videos().insert(part="snippet,status", body=body, media_body=media)
         try:

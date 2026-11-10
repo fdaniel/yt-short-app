@@ -5,7 +5,9 @@ import hashlib
 from datetime import datetime
 from html import escape
 
-from shorts.dashboard.app import TABS, DashboardView, VideoCard
+from shorts.dashboard.app import CHANNEL_TAB, TABS, DashboardView, VideoCard
+from shorts.dashboard.channel_page import CSS as CHANNEL_CSS
+from shorts.dashboard.channel_page import render_channel
 from shorts.models import VideoStatus
 from shorts.script.take import MAX_TAKE_WORDS
 
@@ -333,10 +335,13 @@ def render(view: DashboardView, token: str, notice: str | None = None) -> str:
     tabs = "".join(
         f'<a href="/?tab={name}" class="{"on" if name == view.tab else ""}">{TAB_LABELS[name]} ({view.counts[name]})</a>'
         for name in TABS
-    )
+    ) + f'<a href="/?tab={CHANNEL_TAB}" class="{"on" if view.tab == CHANNEL_TAB else ""}">Channel</a>'
     empty = {"review": "Nothing here yet. New videos arrive after the next automatic run."}
-    cards = ("".join(_card(c, view, token) for c in view.cards)
-             or f'<p class="empty">{empty.get(view.tab, "Nothing here yet.")}</p>')
+    if view.tab == CHANNEL_TAB:
+        cards = render_channel(view.report, view.watching, token)
+    else:
+        cards = ("".join(_card(c, view, token) for c in view.cards)
+                 or f'<p class="empty">{empty.get(view.tab, "Nothing here yet.")}</p>')
     banner = f'<div class="notice" role="status">{escape(notice)}</div>' if notice else ""
     runs = escape("\n".join(view.run_lines)) or "No automatic runs logged yet."
     return (
@@ -346,7 +351,7 @@ def render(view: DashboardView, token: str, notice: str | None = None) -> str:
         '%3Ccircle cx=%2216%22 cy=%2216%22 r=%2216%22 fill=%22%23f4511e%22/%3E%3Ctext x=%2216%22 y=%2221.5%22'
         ' font-family=%22Bahnschrift,Arial%22 font-weight=%22700%22 font-size=%2214%22 text-anchor=%22middle%22'
         ' fill=%22white%22%3ELD%3C/text%3E%3C/svg%3E">'
-        f"<title>{CHANNEL_NAME} review desk</title><style>{_CSS}</style></head><body>"
+        f"<title>{CHANNEL_NAME} review desk</title><style>{_CSS}{CHANNEL_CSS}</style></head><body>"
         f'{_header(view)}<main class="wrap">{banner}<nav aria-label="Videos">{tabs}</nav>{cards}</main>'
         f'<footer class="wrap"><h2>Automatic runs</h2><pre>{runs}</pre></footer><script>{_JS}</script></body></html>'
     )

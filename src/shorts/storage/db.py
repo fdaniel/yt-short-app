@@ -61,6 +61,14 @@ MIGRATIONS: tuple[str, ...] = (
     """
     CREATE INDEX IF NOT EXISTS topics_video_id ON topics(video_id);
     """,
+    """
+    CREATE TABLE channel_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        taken_at TEXT NOT NULL,
+        data TEXT NOT NULL
+    );
+    CREATE INDEX channel_snapshots_taken_at ON channel_snapshots(taken_at);
+    """,
 )
 BUSY_TIMEOUT_S = 30  # the scheduled run and the dashboard share the database
 

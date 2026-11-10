@@ -5,15 +5,17 @@ import os
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from shorts.channel.watcher import ChannelWatcher
 from shorts.config import Settings
 from shorts.discovery.runner import RunLocked, run_once
 from shorts.llm.chain import build_llm
 from shorts.net import build_http_client
 from shorts.pipeline import PipelineDeps
+from shorts.publish.youtube import YouTubeAccount
 from shorts.storage.db import connect
 from shorts.storage.topics import TopicRepository
 from shorts.voice.tts import KokoroTTS
@@ -23,6 +25,7 @@ LOG_MAX_BYTES = 5 * 1024 * 1024
 TASK_NAME = "TechShorts"
 SCHEDULE_EVERY_H = 2
 DEFAULT_LOG = Settings.model_fields["data_dir"].default.expanduser() / "run.log"
+CHANNEL_REFRESH_EVERY = timedelta(hours=6)  # the channel watcher's numbers; YouTube Analytics lag days anyway
 
 
 def _say(message: str) -> None:
@@ -85,7 +88,19 @@ def _run_and_report(settings: Settings) -> int:
         _say(f"No video this run: {report.skipped_reason}")
     log.info("Run finished: %d made, reason=%s, %d stories considered",
              len(report.made), report.skipped_reason, report.considered)
+    _watch_channel(settings)
     return 0
+
+
+def _connected(account: YouTubeAccount) -> bool:
+    return account.channel() is not None
+
+
+def _watch_channel(settings: Settings) -> None:
+    """Keep the dashboard's Channel tab fresh; never a reason for a run to fail."""
+    account = YouTubeAccount(settings.data_dir / "youtube")
+    if _connected(account):
+        ChannelWatcher(settings, account).refresh_if_stale(CHANNEL_REFRESH_EVERY)
 
 
 def schedule_help(config_path: Path) -> int:

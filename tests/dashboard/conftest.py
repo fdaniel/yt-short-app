@@ -55,3 +55,17 @@ def make_ready_video(settings):
         return vid
 
     return _make
+
+
+class FakeWatcher:
+    """The channel watcher with a fixed report."""
+
+    def __init__(self, report=None, message="Channel numbers updated."):
+        self._report, self.message, self.refreshed = report, message, 0
+
+    def report(self, tz=None):
+        return self._report
+
+    def refresh(self):
+        self.refreshed += 1
+        return self.message

@@ -240,3 +240,31 @@ def test_dashboard_already_running_is_simply_opened(tmp_path, capsys, monkeypatc
     monkeypatch.setattr(publish_cli, "open_on_windows", opened.append)
     assert cli.main(["dashboard", "--config", str(write_config(tmp_path))]) == 0
     assert opened == ["http://localhost:8000/"] and "already running" in capsys.readouterr().out
+
+
+def test_run_once_refreshes_the_channel_numbers_when_connected(tmp_path, monkeypatch):
+    calls = []
+
+    class FakeWatcher:
+        def __init__(self, settings, account):
+            pass
+
+        def refresh_if_stale(self, max_age):
+            calls.append(max_age)
+
+    monkeypatch.setattr(auto_cli, "ChannelWatcher", FakeWatcher)
+    monkeypatch.setattr(auto_cli, "_connected", lambda account: True)
+    _run_once_with(monkeypatch, tmp_path, RunReport((), "nothing new", 3))
+    assert calls == [auto_cli.CHANNEL_REFRESH_EVERY]
+
+
+def test_run_once_leaves_the_channel_alone_when_youtube_is_not_connected(tmp_path, monkeypatch):
+    monkeypatch.setattr(auto_cli, "ChannelWatcher", lambda *a: (_ for _ in ()).throw(AssertionError("used")))
+    assert _run_once_with(monkeypatch, tmp_path, RunReport((), "nothing new", 3)) == 0
+
+
+def test_the_dashboard_has_the_channel_watcher(tmp_path, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setattr(publish_cli, "DashboardServer", _FakeServer)
+    cli.main(["dashboard", "--no-open", "--config", str(write_config(tmp_path))])
+    assert _FakeServer.instances[-1].dashboard.view("channel").watching

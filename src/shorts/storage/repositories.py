@@ -98,6 +98,11 @@ class VideoRepository:
         rows = self._conn.execute("SELECT * FROM videos ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
         return [_record(row) for row in rows]
 
+    def youtube_ids(self) -> set[str]:
+        """The YouTube ids of videos this app made and published: the channel watcher's "app news"."""
+        rows = self._conn.execute("SELECT youtube_id FROM videos WHERE youtube_id IS NOT NULL").fetchall()
+        return {row[0] for row in rows}
+
     def recent_closings(self, limit: int) -> list[str]:
         """The closing lines of the latest scripts, newest first."""
         closings: list[str] = []
