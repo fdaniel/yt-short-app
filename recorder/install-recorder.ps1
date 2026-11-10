@@ -32,11 +32,11 @@ $link = (New-Object -ComObject WScript.Shell).CreateShortcut($startup)
 $link.TargetPath = $powershell
 $link.Arguments = $arguments
 $link.WindowStyle = 7
-$link.Description = 'Loadout Recorder: records Steam games with OBS'
+$link.Description = 'Loadout Recorder: saves clips of Steam games with OBS'
 $link.Save()
 
 Start-Process -FilePath $powershell -ArgumentList $arguments -WindowStyle Hidden
 Write-Host ''
 Write-Host 'Loadout Recorder is installed and running. It starts with Windows from now on.'
-Write-Host "Recordings: $(Join-Path $env:USERPROFILE 'Loadout Recorder')"
+Write-Host "Clips: $(Join-Path $env:USERPROFILE 'Loadout Recorder')"
 Write-Host "Log: $(Join-Path $settingsDir 'recorder.log')"

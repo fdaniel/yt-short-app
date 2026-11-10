@@ -23,8 +23,10 @@ SALT, CHALLENGE = "c2FsdA==", "Y2hhbGxlbmdl"
 def _ps(command: str) -> str:
     result = subprocess.run(
         ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
-        capture_output=True, text=True, check=True,
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
+    if result.returncode:
+        raise AssertionError(f"PowerShell failed: {command}\n{result.stderr}")
     return result.stdout.strip()
 
 
@@ -45,36 +47,82 @@ def _wait_for(check, seconds=40):
     raise AssertionError("timed out")
 
 
-class FakeObs:
-    """Speaks just enough obs-websocket v5 and, like OBS, writes a file into the record directory on each start."""
+class Refused(Exception):
+    """OBS answered a request with result false and this comment."""
 
-    def __init__(self, password: str):
+
+class FakeObs:
+    """Speaks just enough obs-websocket v5 to run a replay buffer.
+
+    Like OBS, each save (by request or by the owner's hotkey) writes a new `Replay <n>.mp4` into the record
+    directory and becomes the "last replay", reported as a Windows path with forward slashes (upper-cased here
+    to prove the recorder compares paths without caring about case or slash style).
+    """
+
+    def __init__(self, password: str, refuse_replay: str = "", save_delay: float = 0.0):
         self.password = password
+        self.refuse_replay = refuse_replay
+        self.save_delay = save_delay
         self.requests: list[str] = []
         self.active = False
         self.directory = None
+        self.windows_directory = ""
         self.files: list[Path] = []
+        self.last_replay = ""
+        self._lock = threading.Lock()
 
     def started(self) -> int:
-        return self.requests.count("StartRecord")
+        return self.requests.count("StartReplayBuffer")
 
     def stop_on_its_own(self) -> None:
         self.active = False
 
+    def press_save_hotkey(self) -> Path:
+        """The owner presses "Save Replay": OBS writes a clip without any WebSocket request."""
+        return self._save()
+
+    def _save(self) -> Path:
+        with self._lock:
+            name = f"Replay {len(self.files) + 1}.mp4"
+            path = self.directory / name
+            self.files.append(path)
+            path.write_bytes(b"fake clip")
+            self.last_replay = (self.windows_directory.upper() + "\\" + name).replace("\\", "/")
+            return path
+
     def _answer(self, request: dict) -> dict:
         kind = request["requestType"]
-        if kind == "GetRecordStatus":
+        if kind == "GetReplayBufferStatus":
             return {"outputActive": self.active}
         if kind == "SetRecordDirectory":
-            self.directory = _wsl(request["requestData"]["recordDirectory"])
-        elif kind == "StartRecord":
+            self.windows_directory = request["requestData"]["recordDirectory"]
+            self.directory = _wsl(self.windows_directory)
+        elif kind == "StartReplayBuffer":
+            if self.refuse_replay:
+                raise Refused(self.refuse_replay)
             self.active = True
-            self.files.append(self.directory / f"rec-{len(self.files) + 1}.mp4")
-            self.files[-1].write_bytes(b"fake gameplay")
-        elif kind == "StopRecord":
+        elif kind == "StopReplayBuffer":
             self.active = False
-            return {"outputPath": "unused"}
+        elif kind == "SaveReplayBuffer":
+            if self.save_delay:
+                threading.Timer(self.save_delay, self._save).start()
+            else:
+                self._save()
+        elif kind == "GetLastReplayBufferReplay":
+            return {"savedReplayPath": self.last_replay}
+        elif kind in ("StartRecord", "StopRecord", "GetRecordStatus"):
+            raise Refused(f"{kind} must not be used any more")
         return {}
+
+    def _reply(self, request: dict) -> dict:
+        self.requests.append(request["requestType"])
+        reply = {"requestType": request["requestType"], "requestId": request["requestId"]}
+        try:
+            reply["responseData"] = self._answer(request)
+            reply["requestStatus"] = {"result": True, "code": 100}
+        except Refused as refusal:
+            reply["requestStatus"] = {"result": False, "code": 604, "comment": str(refusal)}
+        return reply
 
     def handle(self, ws):
         hello = {"obsWebSocketVersion": "5.5.0", "rpcVersion": 1,
@@ -86,11 +134,7 @@ class FakeObs:
             return
         ws.send(json.dumps({"op": 2, "d": {"negotiatedRpcVersion": 1}}))
         for raw in ws:
-            request = json.loads(raw)["d"]
-            self.requests.append(request["requestType"])
-            reply = {"requestType": request["requestType"], "requestId": request["requestId"],
-                     "requestStatus": {"result": True, "code": 100}, "responseData": self._answer(request)}
-            ws.send(json.dumps({"op": 7, "d": reply}))
+            ws.send(json.dumps({"op": 7, "d": self._reply(json.loads(raw)["d"])}))
 
 
 @pytest.fixture
@@ -128,10 +172,12 @@ def recorder(windows_dir, steam_key):
     started = []
 
     # steam_process: the recorder itself runs as powershell, so that name always counts as "Steam is running".
-    def _start(obs_password: str, saved_password: str, steam_process: str = "powershell"):
+    # auto_save 0 (no automatic saves) keeps the tests that only need hotkey clips predictable.
+    def _start(obs_password: str, saved_password: str, steam_process: str = "powershell",
+               auto_save: int = 0, retry: int = 60, **obs_options):
         _ps(f"$p = ConvertTo-SecureString '{saved_password}' -AsPlainText -Force | ConvertFrom-SecureString; "
             f"@{{ obs_password = $p }} | ConvertTo-Json | Set-Content '{folder}\\settings.json'")
-        obs = FakeObs(obs_password)
+        obs = FakeObs(obs_password, **obs_options)
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             port = probe.getsockname()[1]
@@ -144,6 +190,7 @@ def recorder(windows_dir, steam_key):
             "-ReadyFolder", f"{folder}\\ready", "-WorkFolder", f"{folder}\\work",
             "-ObsUrl", f"ws://127.0.0.1:{port}", "-SettingsFile", f"{folder}\\settings.json",
             "-ObsExe", f"{folder}\\no-obs.exe", "-PollSeconds", "1",
+            "-AutoSaveSeconds", str(auto_save), "-RetrySeconds", str(retry),
         ])
         started.append((process, server))
         return obs, local
@@ -155,32 +202,110 @@ def recorder(windows_dir, steam_key):
         server.shutdown()
 
 
-def test_records_a_steam_game_and_names_the_file_after_it(recorder, steam_key):
+def _log(local: Path) -> str:
+    log = local / "recorder.log"
+    return log.read_text() if log.exists() else ""
+
+
+def test_a_steam_game_runs_the_replay_buffer_in_the_work_folder_and_never_records(recorder, steam_key):
     obs, local = recorder("hunter2", "hunter2")
 
     _set_running(steam_key, 1492070)
-    _wait_for(lambda: obs.started() == 1)
+    _wait_for(lambda: obs.active)
     _set_running(steam_key, 0)
+    _wait_for(lambda: "StopReplayBuffer" in obs.requests)
+
+    assert obs.directory == local / "work"
+    assert obs.requests.index("SetRecordDirectory") < obs.requests.index("StartReplayBuffer")
+    assert obs.started() == 1
+    assert "StartRecord" not in obs.requests
+    assert not obs.active
+    assert _ready(local) == []
+
+
+def test_automatic_clips_are_sent_while_the_game_runs_and_end_in_auto(recorder, steam_key):
+    obs, local = recorder("hunter2", "hunter2", auto_save=2)
+
+    _set_running(steam_key, 1492070)
+    _wait_for(lambda: len(_ready(local)) >= 2)
+
+    assert obs.active, "the clips left while the game was still running"
+    names = [path.name for path in _ready(local)]
+    assert all(name.startswith("1492070_Sker-Ritual_") and name.endswith("_auto.mp4") for name in names), names
+    assert _ready(local)[0].read_bytes() == b"fake clip"
+    assert not obs.files[0].exists()
+    assert obs.requests.index("SaveReplayBuffer") < obs.requests.index("GetLastReplayBufferReplay")
+
+
+def test_a_clip_saved_with_the_hotkey_is_sent_while_the_game_runs_and_ends_in_pick(recorder, steam_key):
+    obs, local = recorder("hunter2", "hunter2")
+
+    _set_running(steam_key, 1492070)
+    _wait_for(lambda: obs.active)
+    obs.press_save_hotkey()
     _wait_for(lambda: len(_ready(local)) == 1)
 
     [saved] = _ready(local)
     assert saved.name.startswith("1492070_Sker-Ritual_")
-    assert saved.suffix == ".mp4"
-    assert saved.read_bytes() == b"fake gameplay"
-    assert not obs.files[0].exists()
-    assert obs.directory == local / "work"
-    assert obs.requests.count("StopRecord") == 1
-    assert not obs.active
+    assert saved.name.endswith("_pick.mp4")
+    assert obs.active
+    assert "SaveReplayBuffer" not in obs.requests
 
 
-def test_a_recording_that_stops_mid_game_is_restarted_and_both_parts_are_saved(recorder, steam_key):
+def test_an_automatic_clip_that_obs_writes_a_moment_later_still_ends_in_auto(recorder, steam_key):
+    # Real OBS saves in the background: right after SaveReplayBuffer it still reports the previous clip.
+    obs, local = recorder("hunter2", "hunter2", auto_save=2, save_delay=2.5)
+
+    _set_running(steam_key, 1492070)
+    _wait_for(lambda: obs.active)
+    obs.press_save_hotkey()
+    _wait_for(lambda: any(path.name.endswith("_auto.mp4") for path in _ready(local)))
+
+    names = [path.name for path in _ready(local)]
+    assert sum(name.endswith("_pick.mp4") for name in names) == 1, names
+
+
+def test_hotkey_clips_overlapping_automatic_saves_are_all_sent(recorder, steam_key):
+    obs, local = recorder("hunter2", "hunter2", auto_save=1)
+
+    _set_running(steam_key, 1492070)
+    _wait_for(lambda: obs.active)
+    for _ in range(10):
+        obs.press_save_hotkey()
+        time.sleep(0.4)
+    _set_running(steam_key, 0)
+    _wait_for(lambda: "StopReplayBuffer" in obs.requests)
+    _wait_for(lambda: len(_ready(local)) == len(obs.files))
+
+    names = [path.name for path in _ready(local)]
+    assert all(name.endswith(("_auto.mp4", "_pick.mp4")) for name in names), names
+    assert any(name.endswith("_pick.mp4") for name in names)
+    assert any(name.endswith("_auto.mp4") for name in names)
+    assert "Unexpected problem" not in _log(local)
+
+
+def test_obs_without_the_replay_buffer_turned_on_is_told_in_plain_english_and_retried(recorder, steam_key):
+    obs, local = recorder("hunter2", "hunter2", retry=2, refuse_replay="Replay buffer is not available.")
+
+    _set_running(steam_key, 1492070)
+    _wait_for(lambda: obs.started() >= 2)
+
+    assert "Settings > Output > Replay Buffer" in _log(local)
+    assert "StartRecord" not in obs.requests
+    assert _ready(local) == []
+
+
+def test_a_replay_buffer_that_stops_mid_game_is_restarted_and_every_clip_is_sent(recorder, steam_key):
     obs, local = recorder("hunter2", "hunter2")
 
     _set_running(steam_key, 1492070)
     _wait_for(lambda: obs.started() == 1)
+    obs.press_save_hotkey()
     obs.stop_on_its_own()
     _wait_for(lambda: obs.started() == 2)
+    obs.press_save_hotkey()
     _set_running(steam_key, 0)
+    _wait_for(lambda: "StopReplayBuffer" in obs.requests)
     _wait_for(lambda: len(_ready(local)) == 2)
 
     names = [path.name for path in _ready(local)]
@@ -194,7 +319,7 @@ def test_a_game_without_a_name_in_steam_is_named_by_its_id(recorder, steam_key):
 
     _set_running(steam_key, 2076040)
     _wait_for(lambda: obs.started() == 1)
-    _set_running(steam_key, 0)
+    obs.press_save_hotkey()
     _wait_for(lambda: len(_ready(local)) == 1)
 
     assert _ready(local)[0].name.startswith("2076040_app-2076040_")
