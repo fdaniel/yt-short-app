@@ -17,8 +17,10 @@ class Recorder:
     def __init__(self, scores=None, fail=()):
         self.scores, self.fail, self.made = scores or {}, set(fail), []
 
-    def find(self, path, length_s, *, favour_end, timeout_s):
-        return Moment(0.0, float(length_s), self.scores.get(path.name, 1.0))
+    def find(self, path, length_s, *, favour_end, timeout_s, max_s=300):
+        self.asked = getattr(self, "asked", []) + [(path.name, length_s, favour_end, max_s)]
+        total = self.totals.get(path.name, float(length_s)) if hasattr(self, "totals") else float(length_s)
+        return Moment(0.0, min(float(length_s), total), self.scores.get(path.name, 1.0), total)
 
     def make(self, clip, moment, settings, conn, vision):
         if clip.path.name in self.fail:
@@ -236,3 +238,26 @@ def test_nothing_happens_while_a_news_run_renders(clip_settings, conn):
 def test_without_an_inbox_the_desk_is_off(settings, conn):
     rec = Recorder()
     assert _desk(settings, conn, rec).tick() == []
+
+
+def test_a_recording_made_by_hand_is_kept_whole_up_to_three_minutes(clip_settings, conn):
+    settings, inbox = clip_settings
+    rec_clip = _clip(inbox, "1_Game_2026-11-10_21-00-00_rec.mp4")
+    rec = Recorder()
+    _desk(settings, conn, rec).tick()
+    assert rec.made == [rec_clip.name] and not rec_clip.exists()
+    (name, length_s, favour_end, max_s) = rec.asked[0]
+    assert length_s == settings.clips.recording_max_s == 180 and max_s >= 1200 and not favour_end
+
+
+def test_automatic_clips_during_a_hand_recording_are_dropped(clip_settings, conn):
+    settings, inbox = clip_settings
+    rec = Recorder()
+    rec.totals = {"1_Game_2026-11-10_21-00-00_rec.mp4": 240.0}  # recorded 21:00:00 to 21:04:00
+    _clip(inbox, "1_Game_2026-11-10_21-00-00_rec.mp4")
+    _desk(settings, conn, rec).tick()
+    _clip(inbox, "1_Game_2026-11-10_21-02-00_auto.mp4")  # in the middle of it
+    _clip(inbox, "1_Game_2026-11-10_21-20-00_auto.mp4")  # later, something else
+    _desk(settings, conn, rec, clock=lambda: NOW + 60).tick()
+    _desk(settings, conn, rec, clock=lambda: NOW + 3600).tick()
+    assert rec.made == ["1_Game_2026-11-10_21-00-00_rec.mp4", "1_Game_2026-11-10_21-20-00_auto.mp4"]

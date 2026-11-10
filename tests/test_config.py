@@ -118,3 +118,4 @@ def test_clips_are_off_until_an_inbox_is_set(tmp_path):
     cfg.write_text(f"data_dir: {tmp_path}\nclips:\n  inbox: {tmp_path / 'inbox'}\n  length_s: 30\n")
     clips = load_settings(cfg, {"GEMINI_API_KEY": "k"}).clips
     assert clips.inbox == tmp_path / "inbox" and clips.length_s == 30 and clips.auto_keep == 2
+    assert clips.recording_max_s == 180  # YouTube's longest Short

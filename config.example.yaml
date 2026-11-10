@@ -67,3 +67,4 @@ limits:
 #   length_s: 35          # length of each Short (15-60); past ~40 s most viewers leave before the end
 #   auto_keep: 2          # automatic clips made into Shorts per play session, best first (0: only your F9 picks)
 #   session_gap_min: 20   # no new automatic clip for this long: the session is over and its best clips are made
+#   recording_max_s: 180  # a recording you start and stop yourself (F10) is kept whole up to this (YouTube's limit)

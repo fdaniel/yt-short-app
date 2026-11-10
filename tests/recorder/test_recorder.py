@@ -81,6 +81,12 @@ class FakeObs:
         """The owner presses "Save Replay": OBS writes a clip without any WebSocket request."""
         return self._save()
 
+    def record_by_hand(self, name: str = "2026-11-10 21-05-33.mp4") -> Path:
+        """The owner presses Start and then Stop Recording: OBS writes a normal recording, not a Replay file."""
+        path = self.directory / name
+        path.write_bytes(b"fake recording")
+        return path
+
     def _save(self) -> Path:
         with self._lock:
             name = f"Replay {len(self.files) + 1}.mp4"
@@ -250,6 +256,19 @@ def test_a_clip_saved_with_the_hotkey_is_sent_while_the_game_runs_and_ends_in_pi
     assert saved.name.endswith("_pick.mp4")
     assert obs.active
     assert "SaveReplayBuffer" not in obs.requests
+
+
+def test_a_recording_made_by_hand_is_sent_and_ends_in_rec(recorder, steam_key):
+    obs, local = recorder("hunter2", "hunter2")
+
+    _set_running(steam_key, 1492070)
+    _wait_for(lambda: obs.active)
+    obs.record_by_hand()
+    _wait_for(lambda: len(_ready(local)) == 1)
+
+    [saved] = _ready(local)
+    assert saved.name.startswith("1492070_Sker-Ritual_") and saved.name.endswith("_rec.mp4")
+    assert saved.read_bytes() == b"fake recording"
 
 
 def test_an_automatic_clip_that_obs_writes_a_moment_later_still_ends_in_auto(recorder, steam_key):

@@ -7,10 +7,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-ClipKind = Literal["pick", "auto"]  # pick: the owner pressed Save Replay; auto: the recorder saved it by itself
+# pick: the owner pressed Save Replay; auto: the recorder saved it by itself; rec: the owner started and
+# stopped a recording by hand, so all of it is wanted
+ClipKind = Literal["pick", "auto", "rec"]
 VIDEO_SUFFIXES = frozenset({".mp4", ".mkv", ".mov"})
 # <steam app id>_<Game-Name>_<yyyy-mm-dd_HH-MM-SS>[-<n>][_auto|_pick], as the Loadout Recorder names them
-_NAME = re.compile(r"^(\d+)_([A-Za-z0-9-]+)_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})(?:-\d+)?(?:_(auto|pick))?$")
+_NAME = re.compile(r"^(\d+)_([A-Za-z0-9-]+)_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})(?:-\d+)?(?:_(auto|pick|rec))?$")
 
 
 @dataclass(frozen=True)
@@ -31,7 +33,7 @@ def parse_clip(path: Path) -> ClipFile | None:
     if not match:
         return ClipFile(path, None, "", "pick", None)  # dropped in by hand: treat it as the owner's choice
     app_id, game, stamp, kind = match.groups()
-    return ClipFile(path, int(app_id), game.replace("-", " "), "auto" if kind == "auto" else "pick",
+    return ClipFile(path, int(app_id), game.replace("-", " "), kind or "pick",
                     datetime.strptime(stamp, "%Y-%m-%d_%H-%M-%S"))
 
 

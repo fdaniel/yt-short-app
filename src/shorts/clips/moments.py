@@ -27,6 +27,7 @@ class Moment:
     start: float
     end: float
     score: float  # loudness (dB) plus movement over the stretch: higher is more action, comparable between clips
+    total: float = 0.0  # seconds in the whole clip
 
 
 def _spread(values: np.ndarray) -> np.ndarray:
@@ -48,7 +49,8 @@ def best_window(loudness: Sequence[float], motion: Sequence[float], length_s: in
     # ties go to the latest stretch for a pick, to the earliest otherwise
     start = len(sums) - 1 - int(np.argmax(sums[::-1])) if favour_end else int(np.argmax(sums))
     window = slice(start, start + width)
-    return Moment(float(start), float(start + width), float(loud[window].mean() + moving[window].mean()))
+    return Moment(float(start), float(start + width), float(loud[window].mean() + moving[window].mean()),
+                  float(seconds))
 
 
 def loudness_per_second(path: Path, timeout_s: int) -> list[float]:

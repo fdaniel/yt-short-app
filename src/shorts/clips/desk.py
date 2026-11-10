@@ -12,7 +12,7 @@ import sqlite3
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from shorts.clips.inbox import ClipFile, ready_clips
@@ -25,7 +25,8 @@ from shorts.models import VideoFormat, VideoStatus
 from shorts.storage.repositories import VideoRepository
 
 log = logging.getLogger(__name__)
-SAME_MOMENT_S = 60  # an automatic clip saved this close to a pick shows the same moment
+SAME_MOMENT_S = 60  # an automatic clip saved this close to a pick or a recording shows the same moment
+MAX_RECORDING_S = 1200  # a hand recording longer than 20 minutes is not read: its best 3 minutes come from too much
 PER_LOOK = 5  # clips handled per look, so a backlog never holds the news run's lock for long
 FAILED_KEPT = 5  # failed picks kept in the inbox's failed folder for the owner to see
 _UNFINISHED = (VideoStatus.SCRIPTING, VideoStatus.FACT_CHECKED, VideoStatus.RENDERING)
@@ -45,15 +46,25 @@ class Candidate:
 @dataclass(frozen=True)
 class Session:
     candidates: tuple[Candidate, ...] = ()
-    picks: tuple[str, ...] = ()  # when the owner's picks were saved (gaming PC time, ISO)
+    spans: tuple[tuple[str, str], ...] = ()  # times the owner's picks and recordings cover (gaming PC time, ISO)
     last_seen_at: float = 0.0  # when the latest clip of the session was handled (this PC's clock)
 
 
-def _same_moment(saved_at: str | None, picks: Sequence[str]) -> bool:
+def _same_moment(saved_at: str | None, spans: Sequence[tuple[str, str]]) -> bool:
     if not saved_at:
         return False
     saved = datetime.fromisoformat(saved_at)
-    return any(abs((saved - datetime.fromisoformat(p)).total_seconds()) <= SAME_MOMENT_S for p in picks)
+    return any(datetime.fromisoformat(start) <= saved <= datetime.fromisoformat(end) for start, end in spans)
+
+
+def _span(clip: ClipFile, moment: Moment) -> tuple[str, str] | None:
+    """What the owner chose: around a pick's save, or a whole recording (named by when it started)."""
+    if not clip.saved_at:
+        return None
+    margin = timedelta(seconds=SAME_MOMENT_S)
+    if clip.kind == "rec":
+        return clip.saved_at.isoformat(), (clip.saved_at + timedelta(seconds=moment.total) + margin).isoformat()
+    return (clip.saved_at - margin).isoformat(), (clip.saved_at + margin).isoformat()
 
 
 class ClipDesk:
@@ -107,7 +118,7 @@ class ClipDesk:
             if self._already_made(clip.path.name):
                 self._remove(clip.path)
                 return seen, None
-            if clip.kind == "pick":
+            if clip.kind in ("pick", "rec"):
                 return self._pick(clip, seen)
             return self._keep_if_good(clip, seen)
         except Exception as exc:  # a broken clip must not stop the others
@@ -115,17 +126,24 @@ class ClipDesk:
             return seen, self._set_aside(clip, exc)
 
     def _pick(self, clip: ClipFile, session: Session) -> tuple[Session, str]:
-        moment = self._find(clip.path, self._settings.clips.length_s, favour_end=True,
-                            timeout_s=self._settings.limits.ffmpeg_timeout_s)
+        """A pick gives its best stretch; a recording the owner started and stopped is kept whole (up to 3 min)."""
+        clips = self._settings.clips
+        if clip.kind == "rec":
+            moment = self._find(clip.path, clips.recording_max_s, favour_end=False,
+                                timeout_s=self._settings.limits.ffmpeg_timeout_s, max_s=MAX_RECORDING_S)
+        else:
+            moment = self._find(clip.path, clips.length_s, favour_end=True,
+                                timeout_s=self._settings.limits.ffmpeg_timeout_s)
         message = self._made(clip, moment)
-        if not clip.saved_at:
+        span = _span(clip, moment)
+        if span is None:
             return session, message
-        picks = (*session.picks, clip.saved_at.isoformat())
-        twins = [c for c in session.candidates if _same_moment(c.saved_at, picks)]
+        spans = (*session.spans, span)
+        twins = [c for c in session.candidates if _same_moment(c.saved_at, spans)]
         for twin in twins:  # the owner chose this moment: its automatic copy gives up its place
             (self._held / twin.name).unlink(missing_ok=True)
         kept = tuple(c for c in session.candidates if c not in twins)
-        return replace(session, candidates=kept, picks=picks), message
+        return replace(session, candidates=kept, spans=spans), message
 
     def _made(self, clip: ClipFile, moment: Moment) -> str:
         result = self._make(clip, moment, self._settings, self._conn, self._vision)
@@ -134,7 +152,7 @@ class ClipDesk:
 
     def _keep_if_good(self, clip: ClipFile, session: Session) -> tuple[Session, str | None]:
         saved = clip.saved_at.isoformat() if clip.saved_at else None
-        if _same_moment(saved, session.picks):
+        if _same_moment(saved, session.spans):
             self._remove(clip.path)  # the owner already picked this moment
             return session, None
         moment = self._find(clip.path, self._settings.clips.length_s, favour_end=False,
@@ -152,7 +170,7 @@ class ClipDesk:
         messages = []
         for candidate in session.candidates:
             path = self._held / Path(candidate.name).name
-            if not path.exists() or _same_moment(candidate.saved_at, session.picks):
+            if not path.exists() or _same_moment(candidate.saved_at, session.spans):
                 path.unlink(missing_ok=True)
                 continue
             saved = datetime.fromisoformat(candidate.saved_at) if candidate.saved_at else None
@@ -215,7 +233,7 @@ class ClipDesk:
         try:
             data = json.loads(path.read_text())
             return Session(tuple(Candidate(**{**c, "name": Path(c["name"]).name}) for c in data["candidates"]),
-                           tuple(data["picks"]), float(data["last_seen_at"]))
+                           tuple((str(a), str(b)) for a, b in data["spans"]), float(data["last_seen_at"]))
         except FileNotFoundError:
             return Session()
         except (ValueError, KeyError, TypeError) as exc:
@@ -226,5 +244,5 @@ class ClipDesk:
         self._folder.mkdir(parents=True, exist_ok=True)
         temp = self._folder / "session.json.tmp"
         temp.write_text(json.dumps({"candidates": [asdict(c) for c in session.candidates],
-                                    "picks": list(session.picks), "last_seen_at": session.last_seen_at}))
+                                    "spans": [list(s) for s in session.spans], "last_seen_at": session.last_seen_at}))
         temp.replace(self._folder / "session.json")

@@ -20,7 +20,7 @@ def test_a_pick_leans_towards_its_end_where_the_owner_pressed_the_key():
 
 def test_a_short_clip_is_used_whole():
     moment = best_window([-20.0] * 12, [5.0] * 12, 35, favour_end=True)
-    assert (moment.start, moment.end) == (0, 12)
+    assert (moment.start, moment.end, moment.total) == (0, 12, 12)
 
 
 def test_the_score_compares_clips_with_each_other():

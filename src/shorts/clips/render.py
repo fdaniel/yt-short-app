@@ -82,8 +82,12 @@ def render_clip(source: Path, moment: Moment, ass: Path, out: Path, settings: Se
                 "-c:v", "libx264", "-preset", "medium", "-crf", "21", "-maxrate", "8M", "-bufsize", "16M",
                 "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart",
                 str(out)], timeout_s=settings.limits.ffmpeg_timeout_s, cwd=ass.parent)
-    shrink_if_needed(out, settings)
+    shrink_if_needed(out, settings, output_limit_mb(settings))
     return out
+
+
+def output_limit_mb(settings: Settings) -> int:
+    return settings.clips.max_output_mb
 
 
 def grab_frames(source: Path, moment: Moment, work: Path, count: int = 3) -> list[Path]:

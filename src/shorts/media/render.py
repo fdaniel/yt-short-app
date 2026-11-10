@@ -108,8 +108,9 @@ def _final_args(
     ]
 
 
-def shrink_if_needed(out: Path, settings: Settings) -> None:
-    limit = settings.video.max_output_mb * 1024 * 1024
+def shrink_if_needed(out: Path, settings: Settings, max_mb: int | None = None) -> None:
+    allowed_mb = max_mb or settings.video.max_output_mb
+    limit = allowed_mb * 1024 * 1024
     if out.stat().st_size <= limit:
         return
     smaller = out.with_name(out.stem + "_small.mp4")
@@ -120,7 +121,7 @@ def shrink_if_needed(out: Path, settings: Settings) -> None:
     )
     smaller.replace(out)
     if out.stat().st_size > limit:
-        raise RenderError(f"video is still larger than {settings.video.max_output_mb} MB after re-encoding")
+        raise RenderError(f"video is still larger than {allowed_mb} MB after re-encoding")
 
 
 def render_video(

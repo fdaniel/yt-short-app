@@ -11,6 +11,10 @@ def test_a_recorder_clip_name_tells_game_kind_and_time(tmp_path):
     assert clip.saved_at == datetime(2026, 11, 10, 21, 5, 33)
 
 
+def test_a_recording_made_by_hand_is_its_own_kind(tmp_path):
+    assert parse_clip(tmp_path / "3321460_Crimson-Desert_2026-11-10_21-05-33_rec.mp4").kind == "rec"
+
+
 def test_a_second_clip_in_the_same_second_still_parses(tmp_path):
     clip = parse_clip(tmp_path / "3321460_Crimson-Desert_2026-11-10_21-05-33-2_pick.mkv")
     assert clip.kind == "pick" and clip.app_id == 3321460

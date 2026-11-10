@@ -173,6 +173,8 @@ class ClipSettings(_Frozen):
     session_gap_min: int = Field(20, ge=5, le=240)  # no new clip this long: the play session is over
     settle_s: int = Field(20, ge=5, le=600)  # a file unchanged this long has finished arriving
     every_s: int = Field(60, ge=15, le=3600)  # how often the dashboard looks in the inbox
+    recording_max_s: int = Field(180, ge=30, le=180)  # a recording you start and stop yourself is kept whole up to this
+    max_output_mb: int = Field(250, ge=50, le=2000)  # a 3-minute Short is a bigger file than a news video
 
     @field_validator("inbox")
     @classmethod

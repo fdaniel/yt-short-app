@@ -37,3 +37,9 @@ def test_a_broken_clip_is_marked_failed(tmp_path, settings, conn):
         make_clip(parse_clip(broken), Moment(0.0, 5.0, 0.0), settings, conn, [FakeVision(result=clip_text())])
     (record,) = VideoRepository(conn).list_recent(5)
     assert record.status == VideoStatus.FAILED and record.failure_reason
+
+
+def test_a_long_recording_gets_more_frames_for_the_writer():
+    from shorts.clips.maker import frame_count
+
+    assert frame_count(35.0) == 3 and frame_count(170.0) == 6

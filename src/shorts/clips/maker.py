@@ -21,7 +21,8 @@ from shorts.storage.repositories import VideoRepository
 
 log = logging.getLogger(__name__)
 GAMING_CATEGORY = "20"  # YouTube's Gaming category; the news videos use the settings' category
-FRAMES = 3
+FRAMES, LONG_FRAMES = 3, 6  # a long recording needs more pictures for the writer to follow what happens
+LONG_CLIP_S = 60
 
 
 class ClipError(Exception):
@@ -32,6 +33,10 @@ class ClipError(Exception):
 class ClipResult:
     video_id: int
     video_path: Path
+
+
+def frame_count(seconds: float) -> int:
+    return LONG_FRAMES if seconds > LONG_CLIP_S else FRAMES
 
 
 def _metadata(text: ClipText, settings: Settings) -> dict:
@@ -54,7 +59,7 @@ def _hash(video: Path, meta: dict) -> str:
 
 def _build(clip: ClipFile, moment: Moment, work: Path, settings: Settings, vision: Sequence[VisionLLM],
            repo: VideoRepository, video_id: int) -> tuple[dict, list[Path]]:
-    frames = grab_frames(clip.path, moment, work, count=FRAMES)
+    frames = grab_frames(clip.path, moment, work, count=frame_count(moment.end - moment.start))
     text = write_clip_text([frame.read_bytes() for frame in frames], clip.game, vision)
     repo.save_script(video_id, text.model_dump_json(), text.title_options[0])
     repo.set_status(video_id, VideoStatus.FACT_CHECKED)  # nothing to fact-check: the words describe the frames

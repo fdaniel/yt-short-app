@@ -32,3 +32,9 @@ def test_a_vertical_clip_is_kept_vertical(tmp_path, settings):
 def test_frames_are_taken_from_the_moment_for_the_writer(tmp_path):
     frames = grab_frames(gameplay(tmp_path / "in", seconds=8), Moment(2.0, 6.0, 0.0), tmp_path, count=3)
     assert len(frames) == 3 and all(f.read_bytes()[:2] == b"\xff\xd8" for f in frames)  # JPEG
+
+
+def test_long_clips_may_be_bigger_files_than_news_videos(tmp_path, settings):
+    from shorts.clips.render import output_limit_mb
+
+    assert output_limit_mb(settings) > settings.video.max_output_mb

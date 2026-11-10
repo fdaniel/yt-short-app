@@ -1,20 +1,23 @@
 # Loadout Recorder: setting up the gaming PC
 
-The Loadout Recorder saves short clips of your Steam games without you pressing anything.
+The Loadout Recorder saves short clips of your Steam games, even if you press nothing.
 Nothing records continuously any more. When a Steam game starts, OBS keeps the
-last 60 seconds of play in memory (its **replay buffer**), and:
+last 2 minutes of play in memory (its **replay buffer**), and:
 
-- every minute the recorder saves those 60 seconds as a clip (an **automatic** clip);
-- whenever you see something great, press **F9** (the OBS **Save Replay** key) and
-  the last 60 seconds are saved too (your **pick**).
+- every minute the recorder saves the latest stretch as a clip (an **automatic** clip);
+- something great just happened? Press **F9** (the OBS **Save Replay** key) and
+  the last 2 minutes are saved (your **pick**);
+- about to show something (a how-to route, a boss fight)? Press **F10** to start
+  recording and **F10** again to stop (your **recording**). The app keeps all of it,
+  up to 3 minutes, as one Short.
 
 Each clip is sent within seconds, while you keep playing, as
-`<steam id>_<game name>_<date>_auto.mp4` or `..._pick.mp4` in the
+`<steam id>_<game name>_<date>_auto.mp4`, `..._pick.mp4` or `..._rec.mp4` in the
 `Loadout Recorder` folder inside your user folder (`C:\Users\<you>\Loadout Recorder`).
-A clip is about 100-170 MB. The folder is kept out of Videos on purpose: OneDrive
+A clip is about 100-350 MB. The folder is kept out of Videos on purpose: OneDrive
 often backs up Videos, and gameplay would fill its free space. Syncthing copies
 each clip to the Loadout Daily PC, where the app always turns your picks into
-Shorts and keeps only the best automatic clips.
+Shorts (your recordings whole) and keeps only the best automatic clips.
 
 Everything here is free. Setup takes about 20 minutes, once.
 
@@ -46,10 +49,16 @@ Everything here is free. Setup takes about 20 minutes, once.
 **Clips instead of recordings**
 
 5. **Settings > Output > Replay Buffer**: tick **Enable Replay Buffer** and set
-   **Maximum Replay Time** to **60** seconds. If a **Maximum Memory** box is shown,
-   leave it at 512 MB or more. Press **Apply**.
-6. **Settings > Hotkeys**: find **Save Replay**, click the box next to it and press
-   a key you don't use in games (**F9** is a good choice). Press **OK**.
+   **Maximum Replay Time** to **120** seconds. If a **Maximum Memory** box is shown,
+   set it to 1000 MB. Leave the file name prefix as **Replay**: that is how the
+   recorder tells your F9 clips from your F10 recordings. Press **Apply**.
+6. **Settings > Hotkeys**, for each line below click the box next to it and press the key:
+   - **Save Replay**: **F9**
+   - **Start Recording**: **F10**
+   - **Stop Recording**: **F10** (the same key: it starts, then stops. If OBS will not
+     take the same key twice, use **F11** to stop.)
+
+   Press **OK**. Pick other keys if your games use these.
 
 **Let the recorder talk to OBS**
 
@@ -78,10 +87,11 @@ To update it later, download the new ZIP and run the same command again.
 
 ## 4. Test it
 
-1. Start any Steam game and play for two minutes. Press **F9** once along the way.
+1. Start any Steam game and play for three minutes. Press **F9** once along the way,
+   then **F10**, play 30 seconds, and **F10** again.
 2. Open `C:\Users\<you>\Loadout Recorder` (you can leave the game running). Files like
-   `1492070_Crimson-Desert_2026-11-10_21-05-33_auto.mp4` and one ending in `_pick.mp4`
-   should be there.
+   `1492070_Crimson-Desert_2026-11-10_21-05-33_auto.mp4`, one ending in `_pick.mp4`
+   and one ending in `_rec.mp4` should be there.
 3. Close the game.
 
 Nothing there? Open `%APPDATA%\LoadoutRecorder\recorder.log` (paste that into the

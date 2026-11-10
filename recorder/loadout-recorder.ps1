@@ -13,8 +13,9 @@ it asks OBS to save a clip; you can save one yourself any time with the OBS
 Every few seconds it moves each finished clip into the ready folder, named
 after the game and how it was saved, for example
 1492070_Crimson-Desert_2026-11-10_21-05-33_auto.mp4 (automatic save) or
-..._pick.mp4 (your hotkey), so the Loadout Daily app knows which game it shows
-and which clips you chose. Work and ready folders sit on the same drive, so a
+..._pick.mp4 (your Save Replay hotkey) or ..._rec.mp4 (a recording you started
+and stopped yourself), so the Loadout Daily app knows which game it shows and
+which clips you chose. Work and ready folders sit on the same drive, so a
 clip appears in the ready folder (which Syncthing shares) only when complete.
 When the game closes it turns the replay buffer off.
 
@@ -280,8 +281,11 @@ function Test-SessionClip($Session, $File) {
 }
 
 function Get-ClipTag($Session, $File) {
+    # auto: saved by this recorder; pick: the owner's Save Replay hotkey (OBS names those "Replay ...");
+    # rec: a recording the owner started and stopped by hand (OBS names those by date only).
     if ($Session.AutoClips.Contains((Get-PathKey $File.FullName))) { return 'auto' }
-    return 'pick'
+    if ($File.Name -like 'Replay*') { return 'pick' }
+    return 'rec'
 }
 
 function Move-Clips($Session) {
