@@ -36,11 +36,29 @@ def test_long_videos_are_not_graded_against_shorts():
     assert "vid00000004xx" not in grades(snap)
 
 
-def test_a_weak_video_says_when_viewers_swiped_away():
-    snap = snapshot(video(1, views=1400), video(2, views=1500), video(3, views=1300),
-                    video(4, views=380, engaged_views=150, analytics_views=380))
+def usual(n, views, **extra):
+    """A settled Short with the channel's usual engagement: 52% kept watching, 60% watched."""
+    return video(n, views=views, engaged_views=520, analytics_views=1000, avg_view_pct=60.0, **extra)
+
+
+def test_a_weak_video_says_when_viewers_swiped_away_more_than_usual():
+    snap = snapshot(usual(1, 1400), usual(2, 1500), usual(3, 1300),
+                    video(4, views=380, engaged_views=150, analytics_views=380, avg_view_pct=60.0))
     reasons = " ".join(grades(snap)["vid00000004xx"].reasons)
-    assert "39%" in reasons and "first second" in reasons
+    assert "39%" in reasons and "52%" in reasons and "first second" in reasons
+
+
+def test_a_short_at_the_usual_share_is_not_blamed_for_it():
+    # the channel's own numbers are the bar: a fixed 70% would flag every video, the best ones too
+    snap = snapshot(usual(1, 1400), usual(2, 1500), usual(3, 1300),
+                    video(4, views=1450, engaged_views=500, analytics_views=1000, avg_view_pct=57.0))
+    assert grades(snap)["vid00000004xx"].reasons == ()
+
+
+def test_without_enough_numbers_to_compare_nothing_is_claimed():
+    snap = snapshot(video(1, views=1400), video(2, views=1500), video(3, views=1300),
+                    video(4, views=380, engaged_views=150, analytics_views=380, avg_view_pct=20.0))
+    assert not any("%" in r for r in grades(snap)["vid00000004xx"].reasons)
 
 
 def test_a_late_upload_is_named():
@@ -57,11 +75,11 @@ def test_a_few_minutes_before_the_slot_is_not_late():
     assert not any("Posted at" in r for r in grades(snap)["vid00000004xx"].reasons)
 
 
-def test_viewers_leaving_early_is_named():
-    snap = snapshot(video(1, views=1400), video(2, views=1500), video(3, views=1300),
-                    video(4, views=380, avg_view_pct=38.0, duration_s=80))
+def test_viewers_leaving_earlier_than_usual_is_named():
+    snap = snapshot(usual(1, 1400), usual(2, 1500), usual(3, 1300),
+                    video(4, views=380, engaged_views=200, analytics_views=380, avg_view_pct=38.0, duration_s=80))
     reasons = " ".join(grades(snap)["vid00000004xx"].reasons)
-    assert "38%" in reasons and "1:20" in reasons
+    assert "38%" in reasons and "60%" in reasons and "1:20" in reasons
 
 
 def tips(snap):
@@ -114,6 +132,8 @@ def test_the_report_tracks_the_next_checkpoint():
     assert progress["Subscribers"] == (40, 100)
     assert progress["Shorts over 5k views"] == (1, 1)
     assert progress["Long-video watch hours"] == (12.5, 50)
+    # Studio's "viewed vs swiped away" is not in the API, so that target is checked by hand, not faked here
+    assert not any("kept watching" in label for label in progress)
 
 
 def test_partner_program_uses_the_rules_of_the_day():

@@ -14,7 +14,8 @@ def _html(settings, watcher):
 
 
 def _report(**extra):
-    snap = snapshot(video(1, views=1400), video(2, views=1500), video(3, views=1300),
+    usual = dict(engaged_views=520, analytics_views=1000, avg_view_pct=60.0)
+    snap = snapshot(video(1, views=1400, **usual), video(2, views=1500, **usual), video(3, views=1300, **usual),
                     video(4, views=380, engaged_views=150, analytics_views=380, title="Where to Find the <Feral> Claw"),
                     video(5, views=2600, days_old=1, from_app=True, title="Dark Heresy LAUNCHES"),
                     subscribers=13, days=days(740, 0), shorts_views_90d=33000, long_hours_365d=0.4, **extra)

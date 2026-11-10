@@ -18,9 +18,9 @@ TOO_EARLY_DAYS = 2  # Shorts keep growing for about two days before they can be 
 TOP, WEAK = 1.5, 0.5  # times the median views of the same kind
 MIN_PEERS = 3
 RECENT_SHORTS = 20
-STAYED_AIM = 0.70  # the plan's "viewed" goal; under 60% the opening is the problem
-STAYED_LOW = 0.60
-WATCHED_LOW = 50.0  # average % of the Short watched
+# Engagement is judged against the channel's own usual, not a fixed bar: on this channel even the best
+# Shorts keep about half their viewers, so "aim for 70%" flagged every video and taught nothing.
+BELOW_USUAL = 0.8  # this much of the channel's median share counts as clearly worse
 LONG_SHORT_S = 60
 OWN_SLOT = range(18, 21)  # the plan: own gameplay at 18-20h
 NEWS_SLOT = range(11, 14)  # big-game news at 11-13h
@@ -76,16 +76,32 @@ def _clock(seconds: int) -> str:
     return f"{seconds // 60}:{seconds % 60:02d}"
 
 
-def _reasons(video: VideoStats, tz: tzinfo | None) -> tuple[str, ...]:
+@dataclass(frozen=True)
+class Usual:
+    """The channel's median engagement over settled Shorts; None where too few Shorts have the number."""
+
+    stayed: float | None
+    watched: float | None
+
+
+def _usual(settled: list[VideoStats]) -> Usual:
+    stayed = [v.stayed for v in settled if v.stayed is not None]
+    watched = [v.avg_view_pct for v in settled if v.avg_view_pct is not None]
+    return Usual(stayed=median(stayed) if len(stayed) >= MIN_PEERS else None,
+                 watched=median(watched) if len(watched) >= MIN_PEERS else None)
+
+
+def _reasons(video: VideoStats, usual: Usual, tz: tzinfo | None) -> tuple[str, ...]:
     reasons = []
     stayed = video.stayed
-    if stayed is not None and stayed < STAYED_LOW:
-        reasons.append(f"Only {stayed:.0%} kept watching; the rest swiped away. Put the best moment and a text"
-                       " promise in the first second.")
-    if video.avg_view_pct is not None and video.avg_view_pct < WATCHED_LOW:
+    if stayed is not None and usual.stayed and stayed < BELOW_USUAL * usual.stayed:
+        reasons.append(f"Only {stayed:.0%} kept watching (your usual is {usual.stayed:.0%}); the rest swiped away."
+                       " Put the best moment and a text promise in the first second.")
+    watched = video.avg_view_pct
+    if watched is not None and usual.watched and watched < BELOW_USUAL * usual.watched:
         long_note = (f" At {_clock(video.duration_s)} it is long for a Short: aim for 20-40 s."
                      if video.duration_s > LONG_SHORT_S else " Cut the slow parts.")
-        reasons.append(f"Viewers watched only {video.avg_view_pct:.0f}% of it on average.{long_note}")
+        reasons.append(f"Viewers watched {watched:.0f}% of it on average (your usual is {usual.watched:.0f}%).{long_note}")
     posted = _local(video, tz)
     slot, name = (NEWS_SLOT, "11-13h") if video.from_app else (OWN_SLOT, "18-20h")
     nearly = posted + timedelta(minutes=SLOT_GRACE_MIN)
@@ -99,6 +115,7 @@ def grade_videos(snapshot: Snapshot, tz: tzinfo | None = None) -> tuple[Verdict,
     now = snapshot.taken_at
     shorts = [v for v in snapshot.videos if v.is_short][:RECENT_SHORTS]
     settled = [v for v in shorts if v.age_days(now) >= TOO_EARLY_DAYS]
+    usual = _usual(settled)
     verdicts = []
     for video in shorts:
         peers = [p.views for p in settled if p.from_app == video.from_app]
@@ -113,7 +130,7 @@ def grade_videos(snapshot: Snapshot, tz: tzinfo | None = None) -> tuple[Verdict,
             grade = "weak"
         else:
             grade = "ok"
-        reasons = _reasons(video, tz) if grade in ("weak", "ok") else ()
+        reasons = _reasons(video, usual, tz) if grade in ("weak", "ok") else ()
         verdicts.append(Verdict(video, grade, middle, reasons))
     return tuple(verdicts)
 
@@ -162,13 +179,10 @@ def _targets(snapshot: Snapshot, checkpoint: Checkpoint | None) -> tuple[Target,
     big = sum(1 for v in snapshot.videos if v.is_short and v.views >= BIG_SHORT)
     recent = snapshot.videos[:RECENT_SHORTS]
     own = round(100 * sum(1 for v in recent if not v.from_app) / len(recent)) if recent else None
-    stayed = [v.stayed for v in recent if v.is_short and v.stayed is not None]
     return (
         Target("Subscribers", snapshot.subscribers, checkpoint.subscribers),
         Target("Shorts over 5k views", big, checkpoint.shorts_over_5k),
         Target("Long-video watch hours", snapshot.long_hours_365d, checkpoint.watch_hours, "h"),
-        Target("Shorts viewers who kept watching", round(100 * median(stayed)) if stayed else None,
-               checkpoint.stayed_pct, "%"),
         Target("Uploads that are your own", own, checkpoint.own_share_pct, "%"),
     )
 
