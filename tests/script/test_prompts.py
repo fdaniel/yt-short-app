@@ -1,5 +1,5 @@
 from shorts.config import VideoSettings
-from shorts.models import VideoFormat
+from shorts.models import NEWS_FORMATS, VideoFormat
 from shorts.script.prompts import build_factcheck_prompt, build_script_prompt
 from tests.script.drafts import SOURCE, article, draft
 
@@ -18,8 +18,8 @@ def test_script_prompt_rules():
 
 
 def test_each_format_has_its_own_guide():
-    prompts = {build_script_prompt(article(), f, [], VideoSettings()) for f in VideoFormat}
-    assert len(prompts) == len(VideoFormat)
+    prompts = {build_script_prompt(article(), f, [], VideoSettings()) for f in NEWS_FORMATS}
+    assert len(prompts) == len(NEWS_FORMATS)  # gameplay clips have no script: they are the owner's own play
 
 
 def test_feedback_included_when_present():
