@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from shorts.discovery.feeds import FeedItem
 from shorts.llm.base import LLMProvider
-from shorts.models import VideoFormat
+from shorts.models import NEWS_FORMATS, VideoFormat
 
 EXCERPT_CHARS = 600
 MAX_RECENT_TITLES = 40
@@ -25,6 +25,11 @@ class Triage(BaseModel):
     game_title: str | None
     format: VideoFormat
     reason: str
+
+    @field_validator("format")
+    @classmethod
+    def _news_only(cls, value: VideoFormat) -> VideoFormat:
+        return value if value in NEWS_FORMATS else VideoFormat.NEWS_FLASH  # gameplay is the owner's, never news
 
     @field_validator("reason")
     @classmethod
@@ -56,7 +61,7 @@ def build_triage_prompt(items: list[FeedItem], recent_titles: list[str] | tuple[
         for i, it in enumerate(items)
     )
     recent = "\n".join(f"- {t}" for t in list(recent_titles)[:MAX_RECENT_TITLES]) or "- (none yet)"
-    formats = ", ".join(f.value for f in VideoFormat)
+    formats = ", ".join(f.value for f in NEWS_FORMATS)
     return f"""You pick stories for a YouTube Shorts channel about consumer tech and video games
 (phones, PCs, graphics cards, consoles, gadgets, new games, trailers, release dates).
 Viewers are gamers and tech enthusiasts.

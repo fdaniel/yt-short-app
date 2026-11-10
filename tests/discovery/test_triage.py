@@ -66,3 +66,10 @@ def test_story_text_cannot_close_the_stories_block():
 def test_phones_and_gadgets_are_on_topic_for_the_channel():
     prompt = build_triage_prompt([item("iPhone Duo arrives at Apple Store locations worldwide")])
     assert "phones" in prompt and "consoles" in prompt
+
+
+def test_gameplay_is_never_a_news_format():
+    assert "gameplay" not in build_triage_prompt([item("Some news")])
+    verdict = Triage(index=0, interest=5, rumour_or_leak=False, on_topic=True, same_story_as_recent=False,
+                     game_title=None, format="gameplay", reason="r")
+    assert verdict.format == VideoFormat.NEWS_FLASH

@@ -105,7 +105,7 @@ def upload_body(meta: dict[str, Any], settings: YouTubeSettings, publish_at: dat
             "title": " ".join(_plain(str(meta.get("title", ""))).split())[:MAX_TITLE] or "Tech news",
             "description": _description(str(meta.get("description", ""))),
             "tags": _tags([str(h) for h in meta.get("hashtags") or []]),
-            "categoryId": settings.category_id,
+            "categoryId": str(meta.get("category_id") or settings.category_id),
         },
         "status": status,
     }

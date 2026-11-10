@@ -136,3 +136,12 @@ def test_errors_that_waiting_cannot_fix_are_not_retried(code):
     with pytest.raises(ProviderUnavailable):
         p.generate_json("p", Out)
     assert models.calls == 1 and waits == []
+
+
+def test_pictures_are_sent_with_the_prompt():
+    client = FakeGenaiClient(result=_Resp('{"answer": "boss fight"}'))
+    out = GeminiProvider("k", "m", client=client).generate_json_with_images("what happens?", [b"\xff\xd8a"], Out)
+    assert out.answer == "boss fight"
+    contents = client.models.kwargs["contents"]
+    assert contents[-1] == "what happens?"
+    assert contents[0].inline_data.data == b"\xff\xd8a" and contents[0].inline_data.mime_type == "image/jpeg"

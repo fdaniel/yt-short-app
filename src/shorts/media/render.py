@@ -108,7 +108,7 @@ def _final_args(
     ]
 
 
-def _shrink_if_needed(out: Path, settings: Settings) -> None:
+def shrink_if_needed(out: Path, settings: Settings) -> None:
     limit = settings.video.max_output_mb * 1024 * 1024
     if out.stat().st_size <= limit:
         return
@@ -135,7 +135,7 @@ def render_video(
         args = _final_args(visual, narration, ass_path, music, settings, sting, duration or narration.duration)
         # cwd = the captions folder, so the subtitles filter sees a bare filename (no path escaping).
         run_ffmpeg([*args, str(out)], timeout_s=timeout_s, cwd=ass_path.parent)
-        _shrink_if_needed(out, settings)
+        shrink_if_needed(out, settings)
     finally:
         shutil.rmtree(segments, ignore_errors=True)
     return out

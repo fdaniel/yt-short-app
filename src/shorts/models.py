@@ -30,6 +30,10 @@ class VideoFormat(StrEnum):
     VERSUS = "versus"
     WHAT_CHANGED = "what_changed"
     RELEASE_ROUNDUP = "release_roundup"
+    GAMEPLAY = "gameplay"  # the owner's own recorded clip, not news
+
+
+NEWS_FORMATS = tuple(f for f in VideoFormat if f != VideoFormat.GAMEPLAY)
 
 
 class VideoStatus(StrEnum):

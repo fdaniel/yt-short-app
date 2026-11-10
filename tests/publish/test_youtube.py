@@ -327,3 +327,9 @@ def test_google_accepting_fewer_boxes_is_not_an_error(monkeypatch):
         youtube._authorize(Path("x.json"))
     import os
     assert os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] == "1"
+
+
+def test_a_video_can_carry_its_own_category():
+    body = upload_body({**META, "category_id": "20"}, YouTubeSettings())
+    assert body["snippet"]["categoryId"] == "20"
+    assert upload_body(META, YouTubeSettings())["snippet"]["categoryId"] == "28"

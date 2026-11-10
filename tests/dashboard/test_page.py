@@ -167,3 +167,35 @@ def test_card_shows_what_the_video_says_with_the_take_marked(settings, make_read
     assert "<li>The &lt;RTX 5090&gt; is official.</li>" in html
     assert '<li class="take">Grab it if you play at 4K.</li>' in html
     assert "Loadout Daily" in html and "Watch it" in html and "<summary>YouTube texts" in html
+
+
+def _gameplay_card(settings):
+    import json
+
+    from shorts.models import VideoFormat
+    from shorts.storage.db import connect
+    from shorts.storage.repositories import VideoRepository
+
+    conn = connect(settings.data_dir / "shorts.db")
+    repo = VideoRepository(conn)
+    vid = repo.create("clip:1_Crimson-Desert_2026-11-10_21-00-00_pick.mp4", 1, VideoFormat.GAMEPLAY)
+    export = settings.data_dir / "exports" / str(vid)
+    export.mkdir(parents=True)
+    (export / "video.mp4").write_bytes(b"x" * 64)
+    (export / "metadata.json").write_text(json.dumps({"title": "Boss down", "title_options": ["Boss down"],
+                                                       "description": "d", "hashtags": ["#gaming"]}))
+    repo.save_script(vid, json.dumps({"hook": "Boss down in one combo", "lines": ["Dodge first"]}), "Boss down")
+    repo.save_output(vid, export / "video.mp4", export / "metadata.json", "h")
+    for s in ("fact_checked", "rendering", "awaiting_approval"):
+        repo.set_status(vid, VideoStatus(s))
+    conn.close()
+    return vid
+
+
+def test_a_gameplay_clip_card_has_no_take_and_shows_its_text(settings):
+    vid = _gameplay_card(settings)
+    dash = Dashboard(settings, FakeAccount(), opener=print, remake=lambda *a: None)
+    html = _take_html(settings, dash)
+    assert "Your gameplay" in html and f'action="/videos/{vid}/take"' not in html
+    assert "Boss down in one combo" in html and f'action="/videos/{vid}/upload"' in html
+    assert "match the story" not in html

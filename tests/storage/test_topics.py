@@ -74,3 +74,12 @@ def test_step1_database_upgrades_and_keeps_videos(tmp_path, monkeypatch):
     conn = db.connect(path)
     assert VideoRepository(conn).get(1).news_url == "https://kept"
     assert TopicRepository(conn).seen_urls() == set()
+
+
+def test_gameplay_clips_leave_the_news_quota_and_duplicate_check_alone(conn):
+    videos = VideoRepository(conn)
+    clip = videos.create("clip:1_Game_2026-11-10_21-00-00_pick.mp4", 1, VideoFormat.GAMEPLAY)
+    videos.save_script(clip, "{}", "Boss down in one combo")
+    repo = TopicRepository(conn)
+    assert repo.videos_made_on(datetime.now(UTC).astimezone().date()) == 0
+    assert repo.recent_titles(14, datetime.now(UTC) + timedelta(seconds=1)) == []

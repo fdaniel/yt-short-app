@@ -13,7 +13,7 @@ from typing import Any, Protocol
 
 from shorts.config import Settings
 from shorts.dashboard.links import youtube_id_from
-from shorts.models import VideoStatus
+from shorts.models import VideoFormat, VideoStatus
 from shorts.publish.youtube import Channel, UploadResult, YouTubeError, upload_body
 from shorts.script.take import TakeError, clean_take
 from shorts.storage.db import connect
@@ -33,7 +33,7 @@ CHANNEL_TAB = "channel"  # the channel watcher's page, next to the video tabs
 MAX_VIDEOS = 300
 RUN_LOG_TAIL_BYTES = 64 * 1024
 RUN_LOG_LINES = 8
-_RUN_LOGGERS = (" shorts.auto_cli: ", " shorts.discovery.runner: ")
+_RUN_LOGGERS = (" shorts.auto_cli: ", " shorts.discovery.runner: ", " shorts.clips.desk: ", " shorts.clips.loop: ")
 # YouTube needs time to process the upload first; scheduling further out than this is almost surely a typo
 SCHEDULE_MIN_AHEAD = timedelta(minutes=15)
 SCHEDULE_MAX_AHEAD = timedelta(days=60)
@@ -106,6 +106,15 @@ def _script(script_json: str | None):
         return ScriptDraft.model_validate_json(script_json) if script_json else None
     except ValueError:
         return None
+
+
+def _clip_lines(script_json: str | None) -> tuple[str, ...]:
+    """What a gameplay clip shows on screen: its hook, then its captions."""
+    try:
+        data = json.loads(script_json or "{}")
+        return tuple(str(line) for line in [data.get("hook", ""), *data.get("lines", [])] if line)
+    except (ValueError, AttributeError, TypeError):
+        return ()
 
 
 def _run_lines(log_path: Path) -> tuple[str, ...]:
@@ -183,7 +192,8 @@ class Dashboard:
 
     def _card(self, record: VideoRecord, topics: TopicRepository) -> VideoCard:
         topic = topics.for_video(record.id)
-        script = _script(record.script_json)
+        gameplay = record.format == VideoFormat.GAMEPLAY
+        script = None if gameplay else _script(record.script_json)
         return VideoCard(
             record=record,
             meta=_load_meta(record.metadata_path),
@@ -195,7 +205,8 @@ class Dashboard:
             take_busy=self._busy(record.id),
             take_note=self._take_notes.get(record.id, ""),
             take_options=tuple(script.take_options) if script and record.status == VideoStatus.AWAITING_APPROVAL else (),
-            script_lines=(script.hook, *script.body, script.closing) if script else (),
+            script_lines=_clip_lines(record.script_json) if gameplay
+            else (script.hook, *script.body, script.closing) if script else (),
         )
 
     def _busy(self, video_id: int) -> bool:
@@ -220,6 +231,8 @@ class Dashboard:
                 return f"No video #{video_id}."
             if record.status != VideoStatus.AWAITING_APPROVAL:
                 return _already(video_id, record.status)
+            if record.format == VideoFormat.GAMEPLAY:
+                return f"Video #{video_id} is your gameplay: it has no voice for a take."
             with self._takes_lock:
                 if video_id in self._remaking:
                     return self._busy_message(video_id)

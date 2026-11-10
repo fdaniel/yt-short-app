@@ -8,6 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from shorts.channel.watcher import ChannelWatcher
+from shorts.clips_cli import start_clip_loop
 from shorts.config import Settings
 from shorts.dashboard.app import Dashboard
 from shorts.dashboard.server import DashboardServer
@@ -83,7 +84,10 @@ def dashboard_command(settings: Settings, port: int, open_browser: bool) -> int:
               f"Otherwise try another port: --port {port + 1}", file=sys.stderr)
         return 1
     url = f"http://localhost:{port}/"
+    clips = start_clip_loop(settings)
     print(f"Dashboard running at {url}\nLeave this window open; press Ctrl+C to stop it.")
+    if clips:
+        print(f"Gameplay clips arriving in {settings.clips.inbox} become Shorts for review here.")
     if open_browser:
         _open(url)
     try:
@@ -92,6 +96,8 @@ def dashboard_command(settings: Settings, port: int, open_browser: bool) -> int:
         print("\nDashboard stopped.")
     finally:
         server.server_close()
+        if clips:
+            clips.stop()
     return 0
 
 

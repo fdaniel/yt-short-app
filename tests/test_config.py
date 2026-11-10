@@ -109,3 +109,12 @@ def test_bad_voice_speeds_fail_fast(tmp_path, speeds):
     cfg.write_text(f"voice:\n  speeds: {speeds}\n")
     with pytest.raises(ConfigError, match="voice"):
         load_settings(cfg, {"GEMINI_API_KEY": "k"})
+
+
+def test_clips_are_off_until_an_inbox_is_set(tmp_path):
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text(f"data_dir: {tmp_path}\n")
+    assert load_settings(cfg, {"GEMINI_API_KEY": "k"}).clips.inbox is None
+    cfg.write_text(f"data_dir: {tmp_path}\nclips:\n  inbox: {tmp_path / 'inbox'}\n  length_s: 30\n")
+    clips = load_settings(cfg, {"GEMINI_API_KEY": "k"}).clips
+    assert clips.inbox == tmp_path / "inbox" and clips.length_s == 30 and clips.auto_keep == 2

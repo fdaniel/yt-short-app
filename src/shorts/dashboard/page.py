@@ -8,7 +8,7 @@ from html import escape
 from shorts.dashboard.app import CHANNEL_TAB, TABS, DashboardView, VideoCard
 from shorts.dashboard.channel_page import CSS as CHANNEL_CSS
 from shorts.dashboard.channel_page import render_channel
-from shorts.models import VideoStatus
+from shorts.models import VideoFormat, VideoStatus
 from shorts.script.take import MAX_TAKE_WORDS
 
 YOUTUBE_UPLOAD_URL = "https://www.youtube.com/upload"
@@ -241,6 +241,10 @@ def _review_actions(card: VideoCard, view: DashboardView, token: str) -> str:
     if card.take_busy:
         return _step(2, "Your take", '<p class="small">Adding your take: the video is being voiced and rendered again.'
                      " This takes several minutes (up to 15). Reload this page to check.</p>", "mine")
+    if card.record.format == VideoFormat.GAMEPLAY:
+        watched = ('<p class="small">Play it to the end: the words on screen should match what happens. If they'
+                   " don't, discard it, or upload by hand with your own title.</p>")
+        return _step(1, "Watch it", watched) + _step(2, "Publish", _publish(card, view, token)) + _by_hand(card, view, token)
     watched = '<p class="small">Play it to the end: footage, voice and captions should all match the story.</p>'
     return (_step(1, "Watch it", watched)
             + _step(2, "Your take", _take(card, view, token), "mine")
@@ -300,6 +304,8 @@ def _card(card: VideoCard, view: DashboardView, token: str) -> str:
         player += (f'<a class="cover" href="/videos/{r.id}/cover.png?download=1" title="Download cover">'
                    f'<img src="/videos/{r.id}/cover.png" alt="Cover" loading="lazy">Download cover</a>')
     facts = [f"<span>#{r.id}</span>", f"<span>Made {_when(r.created_at)}</span>"]
+    if r.format == VideoFormat.GAMEPLAY:
+        facts.append("<span>Your gameplay</span>")
     if card.source:
         facts.append(f"<span>{escape(card.source)}</span>")
     if card.score is not None:

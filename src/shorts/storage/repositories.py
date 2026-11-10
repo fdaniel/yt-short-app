@@ -99,8 +99,10 @@ class VideoRepository:
         return [_record(row) for row in rows]
 
     def youtube_ids(self) -> set[str]:
-        """The YouTube ids of videos this app made and published: the channel watcher's "app news"."""
-        rows = self._conn.execute("SELECT youtube_id FROM videos WHERE youtube_id IS NOT NULL").fetchall()
+        """The YouTube ids of news videos this app made and published: the channel watcher's "app news".
+        Gameplay clips are the owner's own videos, even when the app cut and uploaded them."""
+        rows = self._conn.execute("SELECT youtube_id FROM videos WHERE youtube_id IS NOT NULL AND format != ?",
+                                  (VideoFormat.GAMEPLAY.value,)).fetchall()
         return {row[0] for row in rows}
 
     def recent_closings(self, limit: int) -> list[str]:

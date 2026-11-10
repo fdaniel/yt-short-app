@@ -12,12 +12,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from shorts import auto_cli, publish_cli
+from shorts import auto_cli, clips_cli, publish_cli
 from shorts.config import ConfigError, Settings, load_settings
 from shorts.llm.base import InvalidOutput, ProviderUnavailable
 from shorts.llm.chain import build_llm
 from shorts.llm.gemini import GeminiProvider
-from shorts.models import VideoFormat
+from shorts.models import NEWS_FORMATS, VideoFormat
 from shorts.music import licensed_tracks
 from shorts.net import build_http_client
 from shorts.pipeline import PipelineDeps, PipelineError, make_video
@@ -37,7 +37,7 @@ def _parser() -> argparse.ArgumentParser:
     make = sub.add_parser("make-video", help="make one video from an official news URL")
     make.add_argument("--news-url", required=True)
     make.add_argument("--steam-app-id", type=int)
-    make.add_argument("--format", default=VideoFormat.NEWS_FLASH.value, choices=[f.value for f in VideoFormat])
+    make.add_argument("--format", default=VideoFormat.NEWS_FLASH.value, choices=[f.value for f in NEWS_FORMATS])
     make.add_argument("--config", default="config.yaml", type=Path)
     check = sub.add_parser("check-setup", help="check tools, keys and folders")
     check.add_argument("--config", default="config.yaml", type=Path)
@@ -53,6 +53,8 @@ def _parser() -> argparse.ArgumentParser:
     dash.add_argument("--port", type=int, default=8000)
     dash.add_argument("--no-open", action="store_true", help="do not open the browser")
     dash.add_argument("--config", default="config.yaml", type=Path)
+    clips = sub.add_parser("clips", help="make Shorts from the gameplay clips in the inbox now (the dashboard looks every minute)")
+    clips.add_argument("--config", default="config.yaml", type=Path)
     connect_yt = sub.add_parser("youtube-connect", help="allow uploads to your YouTube channel (once)")
     connect_yt.add_argument("--config", default="config.yaml", type=Path)
     return parser
@@ -151,6 +153,8 @@ def main(argv: list[str] | None = None) -> int:
         return auto_cli.topics_command(settings, args.last)
     if args.command == "dashboard":
         return publish_cli.dashboard_command(settings, args.port, not args.no_open)
+    if args.command == "clips":
+        return clips_cli.clips_command(settings)
     if args.command == "youtube-connect":
         return publish_cli.youtube_connect_command(settings)
     return _make_video(args, settings)

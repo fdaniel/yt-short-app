@@ -57,3 +57,13 @@ limits:
 #   category_id: "28"          # Science & Technology
 #   synthetic_media: false     # YouTube's "altered or synthetic content" label
 #   audit_approved: false      # true once Google approves the API audit: turns on the Schedule button
+
+# Gameplay clips: the gaming PC's Loadout Recorder saves 60 s clips (docs/first-look-recorder.md) and
+# Syncthing copies them into the inbox. While the dashboard runs it looks every minute: clips you saved
+# with F9 become Shorts at once; of the automatic ones only the best few per play session do. Each clip
+# is deleted after use (on both PCs). Leave `inbox` out to turn clips off. `python -m shorts clips` looks once.
+# clips:
+#   inbox: /mnt/c/Users/<you>/Loadout Inbox
+#   length_s: 35          # length of each Short (15-60); past ~40 s most viewers leave before the end
+#   auto_keep: 2          # automatic clips made into Shorts per play session, best first (0: only your F9 picks)
+#   session_gap_min: 20   # no new automatic clip for this long: the session is over and its best clips are made

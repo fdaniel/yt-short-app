@@ -170,3 +170,13 @@ def test_youtube_ids_of_published_videos(conn):
     repo.mark_published(first, "abc123XYZ_-")
     repo.mark_published(second, None)
     assert repo.youtube_ids() == {"abc123XYZ_-"}
+
+
+def test_published_gameplay_clips_count_as_the_owners_not_the_apps(conn):
+    repo = VideoRepository(conn)
+    news, clip = _ready(repo), repo.create("clip:a.mp4", None, VideoFormat.GAMEPLAY)
+    for s in ("fact_checked", "rendering", "awaiting_approval"):
+        repo.set_status(clip, VideoStatus(s))
+    repo.mark_published(news, "newsNEWSnew")
+    repo.mark_published(clip, "clipCLIPcli")
+    assert repo.youtube_ids() == {"newsNEWSnew"}

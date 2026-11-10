@@ -3,7 +3,7 @@
 import sqlite3
 from datetime import UTC, date, datetime, timedelta
 
-from shorts.models import TopicStatus, VideoStatus
+from shorts.models import TopicStatus, VideoFormat, VideoStatus
 
 
 class TopicRepository:
@@ -62,13 +62,15 @@ class TopicRepository:
             "SELECT title FROM topics WHERE status IN (?, ?) AND created_at >= ?",
             (TopicStatus.PICKED.value, TopicStatus.MADE.value, since),
         )
-        videos = self._conn.execute("SELECT title FROM videos WHERE title IS NOT NULL AND created_at >= ?", (since,))
+        videos = self._conn.execute("SELECT title FROM videos WHERE title IS NOT NULL AND created_at >= ? AND format != ?",
+                                    (since, VideoFormat.GAMEPLAY.value))
         return [row[0] for row in topics] + [row[0] for row in videos]
 
     def videos_made_on(self, day: date, *, game: bool | None = None) -> int:
-        """Videos started on `day` (local time) that did not fail; only game (Steam) or only other news if `game` is set."""
-        rows = self._conn.execute("SELECT created_at, steam_app_id FROM videos WHERE status != ?",
-                                  (VideoStatus.FAILED.value,))
+        """News videos started on `day` (local time) that did not fail; only game (Steam) or only other news if `game`
+        is set. The owner's gameplay clips are not news and use none of the daily quota."""
+        rows = self._conn.execute("SELECT created_at, steam_app_id FROM videos WHERE status != ? AND format != ?",
+                                  (VideoStatus.FAILED.value, VideoFormat.GAMEPLAY.value))
         return sum(1 for created, steam in rows
                    if datetime.fromisoformat(created).astimezone().date() == day
                    and (game is None or (steam is not None) == game))

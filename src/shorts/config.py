@@ -6,7 +6,7 @@ from typing import Literal
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 
 class ConfigError(Exception):
@@ -164,6 +164,22 @@ class YouTubeSettings(_Frozen):
     description_footer: str = ""
 
 
+class ClipSettings(_Frozen):
+    """Gameplay clips the gaming PC's recorder sends (via Syncthing) become Shorts for review."""
+
+    inbox: Path | None = None  # e.g. /mnt/c/Users/<you>/Loadout Inbox; unset turns clips off
+    length_s: int = Field(35, ge=15, le=60)  # Shorts over 40 s lose most viewers before the end
+    auto_keep: int = Field(2, ge=0, le=10)  # automatic clips made into Shorts per play session, best first
+    session_gap_min: int = Field(20, ge=5, le=240)  # no new clip this long: the play session is over
+    settle_s: int = Field(20, ge=5, le=600)  # a file unchanged this long has finished arriving
+    every_s: int = Field(60, ge=15, le=3600)  # how often the dashboard looks in the inbox
+
+    @field_validator("inbox")
+    @classmethod
+    def _expand_inbox(cls, value: Path | None) -> Path | None:
+        return value.expanduser() if value else None
+
+
 class Settings(_Frozen):
     data_dir: Path = Path("~/tech-shorts-data")
     music_dir: Path = Path("assets/music")
@@ -179,6 +195,7 @@ class Settings(_Frozen):
     limits: LimitSettings = LimitSettings()
     discovery: DiscoverySettings = DiscoverySettings()
     youtube: YouTubeSettings = YouTubeSettings()
+    clips: ClipSettings = ClipSettings()
 
     @field_validator("data_dir", "music_dir", "font_file")
     @classmethod

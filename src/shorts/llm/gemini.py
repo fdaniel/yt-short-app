@@ -35,22 +35,30 @@ class GeminiProvider:
         self._sleep = sleep
 
     def generate_json(self, prompt: str, schema: type[T]) -> T:
+        return self._with_retries(prompt, schema)
+
+    def generate_json_with_images(self, prompt: str, images: list[bytes], schema: type[T]) -> T:
+        """The same, with JPEG pictures (e.g. frames of a gameplay clip) placed before the prompt."""
+        parts = [types.Part.from_bytes(data=image, mime_type="image/jpeg") for image in images]
+        return self._with_retries([*parts, prompt], schema)
+
+    def _with_retries(self, contents: str | list[types.Part | str], schema: type[T]) -> T:
         for wait in self._busy_waits_s:
             try:
-                return self._generate(prompt, schema)
+                return self._generate(contents, schema)
             except _Busy as exc:
                 log.warning("%s is busy (%s), trying again in %ss", self._model, exc, wait)
                 self._sleep(wait)
         try:
-            return self._generate(prompt, schema)
+            return self._generate(contents, schema)
         except _Busy as exc:
             raise ProviderUnavailable(str(exc)) from exc
 
-    def _generate(self, prompt: str, schema: type[T]) -> T:
+    def _generate(self, contents: str | list[types.Part | str], schema: type[T]) -> T:
         try:
             response = self._client.models.generate_content(
                 model=self._model,
-                contents=prompt,
+                contents=contents,
                 config={
                     "response_mime_type": "application/json",
                     "response_schema": schema,
