@@ -14,6 +14,7 @@ _SOUNDS = {
     "xess": "ˈɛksɛs",  # "excess"
     "ubisoft": "ˈubisˌɔft",  # OO-bee-soft
     "aion": "ˈIɑn",  # EYE-on (AION 2)
+    "pubg": "pˈʌbʤˌi",  # PUB-gee, not P-U-B-G
 }
 _POSSESSIVE = "ᵻz"
 _WORDS = {

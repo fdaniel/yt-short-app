@@ -12,6 +12,7 @@ from shorts.voice.pronounce import speakable
         ("Intel XeSS support", "Intel [XeSS](/ˈɛksɛs/) support"),
         ("Ubisoft confirmed", "[Ubisoft](/ˈubisˌɔft/) confirmed"),
         ("AION 2 players", "[AION](/ˈIɑn/) 2 players"),
+        ("Play PUBG MOBILE free", "Play [PUBG](/pˈʌbʤˌi/) mobile free"),
         ("costs €29,99 or £24.99", "costs 29 euros 99 or £24.99"),
         ("costs 29,99 € today", "costs 29 euros 99 today"),
         ("only €5,00.", "only 5 euros."),
@@ -66,6 +67,14 @@ def test_the_voice_engine_reads_asus_as_a_word():
 
     phonemes, _ = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M", model=False).g2p(speakable("ASUS"))
     assert phonemes == "ˈAsus"
+
+
+def test_the_voice_engine_says_pubg_the_way_players_do():
+    # the owner, 2026-11-12: the PUBG MOBILE video spelled it "P-U-B-G"; players say "pub-G"
+    from kokoro import KPipeline
+
+    phonemes, _ = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M", model=False).g2p(speakable("PUBG MOBILE"))
+    assert phonemes.startswith("pˈʌbʤˌi ")
 
 
 def test_the_voice_engine_says_a_capitals_studio_name_as_a_word():
