@@ -38,6 +38,13 @@ _UNITS = {
 # a name in capitals ("LANCARSE", "CAPCOM'S"): long enough and with enough vowels to be a word, not an acronym
 _CAPS_WORD = re.compile(r"\b([A-Z]{5,})('S)?\b")
 _ROMAN = re.compile(r"[IVXLCDM]+")
+# a sequel number after a name ("Mount & Blade II", "Final Fantasy VII"): the engine reads "I I".
+# Single letters stay: "Series X" and "Mako X" are names, "I" and "V" are words.
+_NUMERALS = ("II", "III", "IV", "VI", "VII", "VIII", "IX", "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII",
+             "XVIII", "XIX", "XX")
+_NUMBER_WORDS = ("two", "three", "four", "six", "seven", "eight", "nine", "eleven", "twelve", "thirteen",
+                 "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty")
+_SEQUEL = re.compile(r"\b([A-Z][\w'’]*) (" + "|".join(sorted(_NUMERALS, key=len, reverse=True)) + r")\b")
 # European prices ("€29,99", "29,99 €"): the engine takes the comma for thousands and says "two thousand nine hundred..."
 _PRICE_BEFORE = re.compile(r"([€£$])(\d{1,3}),(\d{2})(?![\d,])")
 _PRICE_AFTER = re.compile(r"(?<![\d.,])(\d{1,3}),(\d{2})\s?(€)")
@@ -93,6 +100,7 @@ def speakable(text: str) -> str:
     text = _PRICE_AFTER.sub(lambda m: _price(m.group(3), m.group(1), m.group(2)), text)
     text = _PRICE_WORD.sub(lambda m: _price(_SYMBOLS[m.group(3)], m.group(1), m.group(2)), text)
     text = _CAPS_WORD.sub(_caps_word, text)
+    text = _SEQUEL.sub(lambda m: f"{m.group(1)} {_NUMBER_WORDS[_NUMERALS.index(m.group(2))]}", text)
     text = _SOUND.sub(_sound, text)
     for pattern, spoken in _WORDS.items():
         text = pattern.sub(spoken, text)

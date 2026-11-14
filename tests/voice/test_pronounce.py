@@ -13,6 +13,13 @@ from shorts.voice.pronounce import speakable
         ("Ubisoft confirmed", "[Ubisoft](/ˈubisˌɔft/) confirmed"),
         ("AION 2 players", "[AION](/ˈIɑn/) 2 players"),
         ("Play PUBG MOBILE free", "Play [PUBG](/pˈʌbʤˌi/) mobile free"),
+        # the owner, 2026-11-14: "Mount & Blade II" was read "Mount and Blade I I"
+        ("Mount & Blade II: Bannerlord adds", "Mount & Blade two: Bannerlord adds"),
+        ("Final Fantasy VII Remake and Civilization VI", "Final Fantasy seven Remake and Civilization six"),
+        ("Total War: WARHAMMER III is out", "Total War: Warhammer three is out"),
+        ("Xbox Series X and Razer Mako X", "Xbox Series X and Razer Mako X"),
+        ("I think V is fine", "I think V is fine"),
+        ("Rocky XVIII, FIFA", "Rocky eighteen, FIFA"),
         ("costs €29,99 or £24.99", "costs 29 euros 99 or £24.99"),
         ("costs 29,99 € today", "costs 29 euros 99 today"),
         ("only €5,00.", "only 5 euros."),
@@ -38,7 +45,7 @@ def test_tech_words_are_read_the_way_people_say_them(written, spoken):
 
 
 def test_plain_text_and_acronyms_people_spell_out_are_untouched():
-    text = "AMD and MSI ship RTX GPUs with DLSS in 4K for MMORPG fans, says the CEO. Wow! Rocky XVIII, FIFA"
+    text = "AMD and MSI ship RTX GPUs with DLSS in 4K for MMORPG fans, says the CEO. Wow! FIFA"
     assert speakable(text) == text
 
 
