@@ -180,7 +180,7 @@ class _TooSmall:
 def _too_small(it: FeedItem, steam_id: int | None, settings: Settings, deps: PipelineDeps) -> _TooSmall | None:
     """Why the story's game is too small for a video; None if it is big enough or the story has no game."""
     wanted = settings.discovery.min_steam_players
-    if steam_id is None or not wanted:
+    if steam_id is None or not wanted or it.source in settings.discovery.platform_sources:
         return None
     playing = fetch_player_count(deps.http, steam_id, max_bytes=settings.limits.max_html_bytes)
     if playing is None:

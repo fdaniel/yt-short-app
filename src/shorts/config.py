@@ -138,6 +138,9 @@ class DiscoverySettings(_Frozen):
     # game news only for games this many people are playing on Steam right now (0 = every game);
     # small games got ~500 views and made the channel look mass-produced
     min_steam_players: int = 0
+    # stories from these feeds pass the player bar: the platforms post only about their big games, and those are
+    # often on console or not out yet, with few or no Steam players (owner 2026-11-14: Fable and Halo were skipped)
+    platform_sources: tuple[str, ...] = ("Xbox Wire", "PlayStation Blog", "Nintendo")
     # popular games' own Steam announcements, from Steam's store lists (empty = off)
     steam_lists: tuple[str, ...] = ("popularwishlist", "topsellers")
     steam_games_per_list: int = 25

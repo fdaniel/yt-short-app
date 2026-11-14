@@ -379,8 +379,9 @@ def test_a_story_dated_a_few_hours_ahead_is_left_for_a_later_run_not_set_aside(c
     assert conn.execute("SELECT COUNT(*) FROM topics").fetchone()[0] == 0
 
 
-def big_games_only(cfg, players=20_000):
-    return cfg.model_copy(update={"discovery": cfg.discovery.model_copy(update={"min_steam_players": players})})
+def big_games_only(cfg, players=20_000, platforms=()):
+    update = {"min_steam_players": players, "platform_sources": platforms}
+    return cfg.model_copy(update={"discovery": cfg.discovery.model_copy(update=update)})
 
 
 def mock_players(count):
@@ -409,6 +410,23 @@ def test_a_press_story_about_an_unreleased_game_counts_as_small(cfg, conn):
     run(big_games_only(cfg), conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game="Modern Warfare 4")])]), make)
     assert make.calls == []
     assert "not out yet" in conn.execute("SELECT explanation FROM topics").fetchone()["explanation"]
+
+
+@respx.mock
+def test_a_platform_blog_story_is_big_enough_whatever_steam_says(cfg, conn):
+    # the owner, 2026-11-14: Xbox Wire's Fable and Halo were skipped as "small" for having few Steam players
+    mock_feeds(hw=[], games=GAME_ITEMS)
+    mock_players(67)
+    make = FakeMake(conn)
+    cfg = big_games_only(cfg, platforms=("Xbox Wire",))
+    run(cfg, conn, ScriptedLLM([TriageBatch(verdicts=[verdict(0, 9, game="Modern Warfare 4")])]), make)
+    assert len(make.calls) == 1
+
+
+def test_platform_blogs_are_trusted_by_default():
+    from shorts.config import DiscoverySettings
+
+    assert set(DiscoverySettings().platform_sources) == {"Xbox Wire", "PlayStation Blog", "Nintendo"}
 
 
 @respx.mock
