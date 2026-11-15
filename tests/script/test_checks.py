@@ -161,3 +161,15 @@ def test_a_short_about_a_platform_may_name_the_games_it_adds():
     assert subject_problems(weekly) == []
     about_the_game = weekly.model_copy(update={"subject": "Call of Duty: Modern Warfare 4"})
     assert "leave the others out" in subject_problems(about_the_game)[0]
+
+
+def test_a_number_the_source_writes_as_a_word_is_grounded():
+    # the source says "five new weapons", the script "5 new weapons": the same fact
+    d = draft(body=["It adds 5 new weapons", "It costs $1,999.", "It has 32GB of memory"])
+    assert numbers_ungrounded(d, SOURCE + " There are five new weapons and twenty new songs.") == []
+
+
+def test_a_number_word_counts_only_as_a_whole_word():
+    # "someone" holds "one" and "often" holds "ten": neither grounds a 1 or a 10
+    d = draft(body=["It adds 1 mode and 10 maps", "It costs $1,999.", "It has 32GB of memory"])
+    assert numbers_ungrounded(d, SOURCE + " Someone often plays.") == ["1", "10"]

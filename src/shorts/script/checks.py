@@ -60,9 +60,22 @@ def _numbers(text: str) -> list[str]:
     return [match.replace(",", "") for match in _NUMBER.findall(text)]
 
 
+# a source writes small numbers as words ("five new weapons") that a script may say as digits
+_UNITS = ("zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen "
+          "seventeen eighteen nineteen twenty").split()
+_TENS = {"thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
+_NUMBER_WORDS = {**{word: n for n, word in enumerate(_UNITS)}, **_TENS, "hundred": 100}
+_NUMBER_WORD = re.compile(r"\b(" + "|".join(_NUMBER_WORDS) + r")\b", re.IGNORECASE)
+
+
+def _source_numbers(text: str) -> set[str]:
+    words = {str(_NUMBER_WORDS[w.lower()]) for w in _NUMBER_WORD.findall(text)}
+    return set(_numbers(text)) | words
+
+
 def numbers_ungrounded(draft: ScriptDraft, source_text: str) -> list[str]:
     """Numbers said in the narration or shown on cards that never appear in the source."""
-    known = set(_numbers(source_text))
+    known = _source_numbers(source_text)
     on_cards = [f"{fact.label} {fact.value}" for fact in draft.card_facts]
     spoken = _numbers(" ".join(narration_lines(draft) + on_cards))
     return list(dict.fromkeys(n for n in spoken if n not in known))
