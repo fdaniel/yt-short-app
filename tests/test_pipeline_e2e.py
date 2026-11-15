@@ -138,9 +138,9 @@ def steam_media(video, screenshot=None):
     def _assets(*args, **kwargs):
         made = [Asset(None, AssetKind.TRAILER, video, "https://steam/x.mp4", "steam", "Pub", RightsBasis.STORE_PROMO,
                       "steam-store-promo", True, datetime.now(UTC))]
-        if screenshot:
-            made.append(Asset(None, AssetKind.SCREENSHOT, screenshot, "https://steam/s.jpg", "steam", "Pub",
-                              RightsBasis.STORE_PROMO, "steam-store-promo", False, datetime.now(UTC)))
+        if screenshot:  # a Steam page has several screenshots
+            made += [Asset(None, AssetKind.SCREENSHOT, screenshot, f"https://steam/s{n}.jpg", "steam", "Pub",
+                           RightsBasis.STORE_PROMO, "steam-store-promo", False, datetime.now(UTC)) for n in range(3)]
         return made
 
     return _assets
@@ -416,6 +416,16 @@ def test_e2e_tech_story_with_few_photos_adds_stock_footage(settings, conn, synth
                    conn)
     kinds = [a.kind for a in AssetRepository(conn).list_for_video(r.video_id)]
     assert search.called and kinds.count(AssetKind.PRESS_IMAGE) == 1 and AssetKind.STOCK_VIDEO in kinds
+
+
+@respx.mock
+def test_e2e_a_story_with_one_photo_and_no_video_is_refused(settings, conn):
+    # the owner, 2026-11-14: the PS5 Spider-Man 2 Short was one photo panned for 33 seconds
+    respx.get(TECH).respond(200, text=article_with_photos(PHOTOS[:1]))
+    mock_photos(PHOTOS[:1])
+    deps = PipelineDeps(httpx.Client(), ScriptedLLM([GOOD, ALL_OK]), FakeTTS(rate=0.07))
+    with pytest.raises(PipelineError, match="too few pictures"):
+        make_video(TECH, None, VideoFormat.NEWS_FLASH, settings, deps, conn)
 
 
 @respx.mock

@@ -59,6 +59,8 @@ CLOSING_SPEED = 1.0
 CLOSING_GAP_S = 0.4
 RECENT_CLOSINGS = 8  # shown to the script writer so each closing starts differently from the last ones
 MIN_PRESS_IMAGES = 4  # fewer official photos and clips than this: licensed stock video fills in
+# without moving footage, fewer pictures than this make one photo panned for half a minute (owner 2026-11-14)
+MIN_PICTURES = 3
 # trailer-only: a trailer's first and last seconds are logos, ratings and store end cards
 TRAILER_HEAD_S, TRAILER_TAIL_S = 3.0, 8.0
 CARD_PREFIX = "card_"  # generated text cards: never a cover picture
@@ -407,6 +409,8 @@ def _gather_visuals(draft: ScriptDraft, article: Article, job: _Job, duration: f
     stock = clips + _stock_shots(stock_assets, video.slot_s)
     if not (trailer or stock or stills):
         raise ValueError(_no_footage_reason(job.settings, job.steam_app_id is not None))
+    if not (trailer or stock) and len(stills) < MIN_PICTURES:
+        raise ValueError(f"too few pictures for a video: {len(stills)} photo(s) and no moving footage")
     music = pick_music(job.settings.music_dir, random.Random(job.video_id))
     rest = _log_usable(_cards(draft, article, job) + ([music] if music else []), blocked, job)
     return _Visuals(steam + press + stock_assets + rest, trailer, stock, stills, clips)
